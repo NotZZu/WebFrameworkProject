@@ -67,7 +67,7 @@
     border-color: var(--accent);
   }
   main {
-    max-width: 860px;
+    max-width: 900px;
     margin: 0 auto;
     padding: 32px 20px 80px;
   }
@@ -137,8 +137,60 @@
     font-size: 13px;
     padding: 20px;
   }
+  .doc-embed {
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+    margin: 4px 0 28px;
+    background: var(--bg);
+  }
+  .doc-embed-bar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    background: var(--navy);
+  }
+  .doc-embed-label {
+    color: white;
+    font-weight: 600;
+    font-size: 14px;
+  }
+  .doc-embed-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .dl-btn {
+    text-decoration: none;
+    background: var(--accent);
+    color: white !important;
+    font-size: 12.5px;
+    font-weight: 600;
+    padding: 6px 12px;
+    border-radius: 999px;
+  }
+  .dl-btn:hover { background: #2f46d1; }
+  .doc-frame {
+    width: 100%;
+    height: 70vh;
+    min-height: 420px;
+    border: none;
+    display: block;
+    background: white;
+  }
+  .doc-embed-note {
+    margin: 0;
+    padding: 10px 16px;
+    font-size: 13px;
+    color: var(--muted);
+    background: white;
+  }
   @media print {
     nav.tabs { display: none; }
+    .doc-embed { display: none; }
     section.doc-section { break-inside: avoid; box-shadow: none; border: none; }
   }
 </style>
@@ -153,6 +205,7 @@
 <a href="#intro">프로젝트 개요</a>
 <a href="#team-plan">팀별 계획서</a>
 <a href="#requirements">요구사항 정의서</a>
+<a href="#system-design">시스템 설계서</a>
 <a href="#rfp">원본 과업지시서</a>
 </nav>
 <main>
@@ -234,6 +287,14 @@
 </section>
 
 <section id="team-plan" class="doc-section">
+
+<div class="doc-embed">
+  <div class="doc-embed-bar">
+    <span class="doc-embed-label">📄 팀별 계획서 (PPTX) 원본 보기</span>
+    <div class="doc-embed-actions"><a class="dl-btn" href="assets/original/team-plan.pptx" download>PPTX 다운로드</a><a class="dl-btn" href="assets/pdf/team-plan.pdf" download>PDF 다운로드</a></div>
+  </div>
+  <iframe class="doc-frame" src="assets/pdf/team-plan.pdf" loading="lazy"></iframe>
+</div>
 <h1 id="_1">팀별 계획서</h1>
 <p><strong>프로젝트명</strong>: 자동화 검증시스템 서비스 개선 및 확장 기능 개발
 <strong>부제</strong>: Selenium 기반 웹 서비스 테스트 자동화 프레임워크 구축 중심 프로토타입
@@ -408,6 +469,14 @@
 </section>
 
 <section id="requirements" class="doc-section">
+
+<div class="doc-embed">
+  <div class="doc-embed-bar">
+    <span class="doc-embed-label">📄 요구사항 정의서 (DOCX) 원본 보기</span>
+    <div class="doc-embed-actions"><a class="dl-btn" href="assets/original/requirements.docx" download>DOCX 다운로드</a><a class="dl-btn" href="assets/pdf/requirements.pdf" download>PDF 다운로드</a></div>
+  </div>
+  <iframe class="doc-frame" src="assets/pdf/requirements.pdf" loading="lazy"></iframe>
+</div>
 <h1 id="_1">요구사항 정의서</h1>
 <p><strong>프로젝트</strong>: 자동화 검증시스템 서비스 개선 및 확장 기능 개발 (Selenium 기반 웹 서비스 테스트 자동화 프레임워크 구축 중심 프로토타입)
 <strong>작성자</strong>: 이상현 (학번 202647026) · <strong>단계</strong>: 분석(1~2주) · <strong>버전</strong>: v1.0 · <strong>작성일</strong>: 2026-09-12</p>
@@ -775,7 +844,30 @@
 </table>
 </section>
 
+<section id="system-design" class="doc-section">
+<h1>시스템 설계서</h1>
+<p>설계 단계(3~5주)의 핵심 산출물로, 시스템 아키텍처·화면 설계·데이터베이스 설계·API 설계·요구사항 매핑을 다룹니다. 원본 문서를 아래에서 그대로 열람하실 수 있습니다.</p>
+<div class="doc-embed">
+  <div class="doc-embed-bar">
+    <span class="doc-embed-label">📄 시스템 설계서 (DOCX) 원본 보기</span>
+    <div class="doc-embed-actions"><a class="dl-btn" href="assets/original/system-design.docx" download>DOCX 다운로드</a><a class="dl-btn" href="assets/pdf/system-design.pdf" download>PDF 다운로드</a></div>
+  </div>
+  <iframe class="doc-frame" src="assets/pdf/system-design.pdf" loading="lazy"></iframe>
+</div>
+
+</section>
+
 <section id="rfp" class="doc-section">
+
+<div class="doc-embed">
+  <div class="doc-embed-bar">
+    <span class="doc-embed-label">📄 원본 과업지시서 (HWP)</span>
+    <div class="doc-embed-actions">
+      <a class="dl-btn" href="assets/original/rfp-original.hwp" download>HWP 다운로드</a>
+    </div>
+  </div>
+  <p class="doc-embed-note">한글(HWP) 문서는 브라우저에서 바로 미리볼 수 없어 다운로드로 제공합니다. 아래는 텍스트 추출본입니다.</p>
+</div>
 <h1 id="_1">과업지시서: 자동화 검증시스템 서비스 개선 및 확장 기능 개발</h1>
 <blockquote>
 <p>발주기관: ETRI 부설 국가보안기술연구소 (2026. 7.)
@@ -984,7 +1076,7 @@
 </section>
 </main>
 <footer>
-  <p>본 페이지는 GitHub 저장소의 문서를 발표용으로 정리한 것입니다. 원본 문서는 저장소의 <code>docs/</code> 폴더를 참고하세요.</p>
+  <p>각 문서 섹션 상단의 뷰어는 원본 서식 그대로 표시됩니다. 다운로드 버튼으로 PPTX/DOCX/HWP 원본 파일도 받으실 수 있습니다.</p>
 </footer>
 </body>
 </html>

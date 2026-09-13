@@ -10,13 +10,14 @@ ETRI 부설 국가보안기술연구소가 발주한 실제 과업지시서 「�
 
 ## 문서
 
-| 문서 | 설명 |
-|---|---|
-| [`docs/rfp-original.md`](docs/rfp-original.md) | 원본 과업지시서 전문 (텍스트 추출본) |
-| [`docs/team-plan.md`](docs/team-plan.md) | 팀별 계획서 — 목적, 주요 기능, 15주 개발계획, 산출물, 기대효과 |
-| [`docs/requirements.md`](docs/requirements.md) | 요구사항 정의서 — 기능/비기능 요구사항, 우선순위(MoSCoW), 추적 매트릭스 |
+| 문서 | 설명 | 원본 파일 |
+|---|---|---|
+| [`docs/rfp-original.md`](docs/rfp-original.md) | 원본 과업지시서 전문 (텍스트 추출본) | [HWP](assets/original/rfp-original.hwp) |
+| [`docs/team-plan.md`](docs/team-plan.md) | 팀별 계획서 — 목적, 주요 기능, 15주 개발계획, 산출물, 기대효과 | [PPTX](assets/original/team-plan.pptx) · [PDF](assets/pdf/team-plan.pdf) |
+| [`docs/requirements.md`](docs/requirements.md) | 요구사항 정의서 — 기능/비기능 요구사항, 우선순위(MoSCoW), 추적 매트릭스 | [DOCX](assets/original/requirements.docx) · [PDF](assets/pdf/requirements.pdf) |
+| [`docs/system-design.md`](docs/system-design.md) | 시스템 설계서 — 아키텍처, 화면/DB/API 설계, 요구사항 매핑 | [DOCX](assets/original/system-design.docx) · [PDF](assets/pdf/system-design.pdf) |
 
-원본 발표용 파일(팀별 계획서 .pptx, 요구사항 정의서 .docx, 과업지시서 .hwp)은 바이너리 오피스 문서라 버전관리에 적합하지 않아 저장소에는 마크다운 사본만 두고, 실제 파일은 대화(채팅)로 전달된 산출물을 사용합니다.
+발표용 웹페이지(GitHub Pages)에서는 위 원본 문서를 마크다운 요약과 함께 뷰어로 바로 열람할 수 있습니다: https://notzzu.github.io/WebFrameworkProject/
 
 ## 프로젝트 범위 (요약)
 
