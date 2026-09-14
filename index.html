@@ -188,6 +188,37 @@
     color: var(--muted);
     background: white;
   }
+  .shot-gallery {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 20px;
+    margin: 20px 0 8px;
+  }
+  .shot-card {
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+    background: var(--bg);
+  }
+  .shot-card img {
+    width: 100%;
+    display: block;
+    border-bottom: 1px solid var(--border);
+  }
+  .shot-card .shot-label {
+    padding: 10px 14px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--navy);
+  }
+  .erd-wrap {
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+    background: var(--bg);
+    margin: 20px 0;
+  }
+  .erd-wrap img { width: 100%; display: block; }
   @media print {
     nav.tabs { display: none; }
     .doc-embed { display: none; }
@@ -206,6 +237,7 @@
 <a href="#team-plan">팀별 계획서</a>
 <a href="#requirements">요구사항 정의서</a>
 <a href="#system-design">시스템 설계서</a>
+<a href="#screen-design">화면설계 · ERD</a>
 <a href="#rfp">원본 과업지시서</a>
 </nav>
 <main>
@@ -853,6 +885,42 @@
     <div class="doc-embed-actions"><a class="dl-btn" href="assets/original/system-design.docx" download>DOCX 다운로드</a><a class="dl-btn" href="assets/pdf/system-design.pdf" download>PDF 다운로드</a></div>
   </div>
   <iframe class="doc-frame" src="assets/pdf/system-design.pdf" loading="lazy"></iframe>
+</div>
+
+</section>
+
+<section id="screen-design" class="doc-section">
+<h1>화면설계 · ERD</h1>
+<p>시스템 설계서 3장(화면설계)·4장(데이터베이스설계)의 내용을 바탕으로 만든 주요 화면 목업과 ERD입니다. 5개 핵심 화면(SC-01, SC-02, SC-04, SC-06, SC-07)으로 로그인부터 CAVP 시험 신청, 검증서 이력 조회, 위변조 탐지까지의 핵심 사용자 흐름을 확인할 수 있습니다.</p>
+
+<h2>주요 화면 목업</h2>
+<div class="shot-gallery">
+  <div class="shot-card">
+    <img src="assets/screens/sc01-login.jpg" alt="SC-01 회원가입/로그인 화면" loading="lazy">
+    <div class="shot-label">SC-01 · 회원가입/로그인</div>
+  </div>
+  <div class="shot-card">
+    <img src="assets/screens/sc02-dashboard.jpg" alt="SC-02 마이페이지 대시보드 화면" loading="lazy">
+    <div class="shot-label">SC-02 · 마이페이지 대시보드</div>
+  </div>
+  <div class="shot-card">
+    <img src="assets/screens/sc04-apply.jpg" alt="SC-04 CAVP 시험 신청 화면" loading="lazy">
+    <div class="shot-label">SC-04 · CAVP 시험 신청</div>
+  </div>
+  <div class="shot-card">
+    <img src="assets/screens/sc06-history.jpg" alt="SC-06 검증서 이력 조회 화면" loading="lazy">
+    <div class="shot-label">SC-06 · 검증서 이력 조회</div>
+  </div>
+  <div class="shot-card">
+    <img src="assets/screens/sc07-tamper.jpg" alt="SC-07 검증서 위변조 탐지 결과 화면" loading="lazy">
+    <div class="shot-label">SC-07 · 검증서 위변조 탐지 결과</div>
+  </div>
+</div>
+
+<h2>데이터베이스 ERD</h2>
+<p>4개 테이블(<code>users</code>, <code>personal_info</code>, <code>cavp_applications</code>, <code>certificates</code>)의 관계입니다. <code>users</code>는 <code>personal_info</code>와 1:1, <code>cavp_applications</code>와 1:N, <code>cavp_applications</code>는 <code>certificates</code>와 1:N 관계를 가집니다.</p>
+<div class="erd-wrap">
+  <img src="assets/screens/erd-diagram.jpg" alt="자동화 검증시스템 ERD 다이어그램" loading="lazy">
 </div>
 
 </section>
