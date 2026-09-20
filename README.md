@@ -16,6 +16,8 @@ ETRI 부설 국가보안기술연구소가 발주한 실제 과업지시서 「�
 | [`docs/team-plan.md`](docs/team-plan.md) | 팀별 계획서 — 목적, 주요 기능, 15주 개발계획, 산출물, 기대효과 | [PPTX](assets/original/team-plan.pptx) · [PDF](assets/pdf/team-plan.pdf) |
 | [`docs/requirements.md`](docs/requirements.md) | 요구사항 정의서 — 기능/비기능 요구사항, 우선순위(MoSCoW), 추적 매트릭스 | [DOCX](assets/original/requirements.docx) · [PDF](assets/pdf/requirements.pdf) |
 | [`docs/system-design.md`](docs/system-design.md) | 시스템 설계서 — 아키텍처, 화면/DB/API 설계, 요구사항 매핑 | [DOCX](assets/original/system-design.docx) · [PDF](assets/pdf/system-design.pdf) |
+| 화면설계 · ERD (GitHub Pages) | 주요 화면 목업 5종(SC-01,02,04,06,07) 및 데이터베이스 ERD | https://notzzu.github.io/WebFrameworkProject/#screen-design |
+| 사용자중심설계서 | 사용자 유형/페르소나, 사용자 시나리오, 유스케이스(UC-01~06), 화면 흐름도, 사용성 설계 원칙, 예외상황 UX | [DOCX](assets/original/ucd.docx) · [PDF](assets/pdf/ucd.pdf) |
 
 발표용 웹페이지(GitHub Pages)에서는 위 원본 문서를 마크다운 요약과 함께 뷰어로 바로 열람할 수 있습니다: https://notzzu.github.io/WebFrameworkProject/
 
