@@ -47,6 +47,10 @@ jobs:
             python tools/ci_summary.py report.xml >> "$GITHUB_STEP_SUMMARY" || true
             python tools/make_test_report.py report.xml cases.json test-artifacts/시험결과서.html >> "$GITHUB_STEP_SUMMARY"
           fi
+      - name: 시험 관리 엑셀 갱신 (결과 XML 파싱 → 실행이력·케이스별결과·대시보드)
+        if: always()
+        run: |
+          if [ -f report.xml ]; then python tools/update_tracker.py --xml report.xml --cases cases.json; fi
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -54,6 +58,7 @@ jobs:
           path: |
             webservice/report.xml
             webservice/test-artifacts/
+            webservice/tracker/
 
   merge:
     needs: test               # test 가 전부 성공해야 실행
@@ -75,5 +80,15 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git merge --no-ff "${{ github.sha }}" -m "Merge ${{ github.ref_name }} (CI 통과 자동 병합)"
           git push origin main
+      - name: 시험 관리 엑셀을 내려받아 main 에 기록
+        uses: actions/download-artifact@v4
+        with:
+          name: test-report
+          path: ci-artifacts
+      - name: 엑셀 커밋
+        run: |
+          cp ci-artifacts/tracker/테스트관리.xlsx webservice/tracker/테스트관리.xlsx
+          git add webservice/tracker/테스트관리.xlsx
+          git diff --cached --quiet || { git commit -m "chore: 시험 진척도 엑셀 갱신 (${{ github.ref_name }})"; git push origin main; }
       - name: 병합 완료한 브랜치 삭제
         run: git push origin --delete "${{ github.ref_name }}" || true
