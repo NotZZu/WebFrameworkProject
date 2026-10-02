@@ -3,7 +3,7 @@ name: CI (test → auto-merge)
 # 서브 브랜치(feature/**, fix/**)에 푸시하면: main 과 합친 상태로 테스트 → 전부 통과하면 main 에 자동 병합.
 on:
   push:
-    branches: ["feature/**", "fix/**"]
+    branches: ["feature/**", "fix/**", "main"]   # main 푸시는 검증만(병합 없음)
   workflow_dispatch:
 
 concurrency:
@@ -26,6 +26,10 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git merge --no-commit --no-ff origin/main || { echo "::error::main 과 충돌 — 로컬에서 main 을 병합해 해결 후 다시 푸시하세요"; exit 1; }
+      - name: 커밋 메시지 규칙 검사
+        if: github.ref != 'refs/heads/main'
+        working-directory: webservice
+        run: python tools/check_commits.py origin/main "${{ github.sha }}"
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
@@ -33,21 +37,27 @@ jobs:
           cache-dependency-path: webservice/requirements.txt
       - run: pip install -r requirements.txt playwright
       - run: playwright install --with-deps chromium
-      - name: pytest (단위 + 통합 + 브라우저 E2E)
-        run: python -m pytest -q --junitxml=report.xml
-      - name: 결과 요약
+      - name: pytest (단위 + 통합 + 브라우저 E2E + 커버리지 하한)
+        run: python -m pytest -q --junitxml=report.xml --cov=app --cov-report=term --cov-fail-under=$(cat tools/coverage_floor.txt)
+      - name: 결과 요약 · 시험결과서 생성
         if: always()
         run: |
-          [ -f report.xml ] && python tools/ci_summary.py report.xml >> "$GITHUB_STEP_SUMMARY" || true
+          if [ -f report.xml ]; then
+            python scripts/export_cases.py cases.json
+            python tools/ci_summary.py report.xml >> "$GITHUB_STEP_SUMMARY" || true
+            python tools/make_test_report.py report.xml cases.json test-artifacts/시험결과서.html >> "$GITHUB_STEP_SUMMARY"
+          fi
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: test-report
-          path: webservice/report.xml
+          path: |
+            webservice/report.xml
+            webservice/test-artifacts/
 
   merge:
     needs: test               # test 가 전부 성공해야 실행
-    if: github.event_name == 'push'
+    if: github.event_name == 'push' && github.ref != 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
       contents: write

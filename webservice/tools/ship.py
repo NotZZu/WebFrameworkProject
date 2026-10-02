@@ -47,6 +47,10 @@ def main():
             print("로컬 테스트 실패 — 올리지 않습니다. (--skip-tests 로 건너뛸 수 있음)")
             return 1
 
+    import re
+    if not re.match(r"^(feat|fix|test|docs|refactor|chore|ci|style|perf)(\([^)]+\))?!?: .{2,}", a.message):
+        print("커밋 메시지는 'feat: 설명' / 'fix: 설명' 형식이어야 합니다 (feat|fix|test|docs|refactor|chore|ci|style|perf).")
+        return 1
     current = out("git", "rev-parse", "--abbrev-ref", "HEAD")
     branch = a.branch or (current if current.startswith(("feature/", "fix/")) else
                           "feature/" + datetime.datetime.now().strftime("%Y%m%d-%H%M%S"))
