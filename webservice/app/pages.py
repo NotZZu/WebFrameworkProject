@@ -1,4 +1,4 @@
-"""화면(HTML) 라우트: SC-01 로그인/회원가입, SC-02 대시보드(자리표시)."""
+"""화면(HTML) 라우트: SC-01 로그인/회원가입, SC-02 대시보드."""
 from flask import Blueprint, redirect, render_template, session as http_session, url_for
 
 from .api.helpers import db
@@ -25,4 +25,4 @@ def dashboard():
     except AppError:
         http_session.clear()
         return redirect(url_for("pages.login_page"))
-    return render_template("dashboard_placeholder.html", user=user)
+    return render_template("dashboard.html", user=user)

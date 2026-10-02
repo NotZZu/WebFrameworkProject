@@ -62,7 +62,7 @@ def test_dashboard_reflects_changes(login_as, db):
     factories.make_certificate(db, a, tamper_status="suspected")
     after = c.get("/api/dashboard").get_json()
     assert after["applications"]["total"] == 1 and after["certificates"]["suspected"] == 1
-    assert after["notifications"] and after["notifications"][0]["level"] == "warning"
+    assert after["notifications"] and after["notifications"][0]["type"] == "warning"
 
 
 @case("IT-39", "FR-03", "GET /dashboard 페이지: 접근 제어와 화면 요소", "비로그인 302 → /, 로그인 시 #welcome/#kpi-in-progress/#recent-body/#notifications/#logout 포함", "positive")
