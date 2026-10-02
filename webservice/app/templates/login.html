@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>로그인 — 자동화 검증시스템</title>
+<style>
+:root{--navy:#1e2761;--accent:#3d5afe;--bg:#f4f6fa;--muted:#6b7488;--line:#dfe3ee;--err:#d93025}
+*{box-sizing:border-box}
+body{margin:0;font-family:system-ui,-apple-system,"Noto Sans KR","Malgun Gothic",sans-serif;color:var(--navy);background:var(--bg);min-height:100vh;display:grid;grid-template-columns:minmax(320px,40%) 1fr}
+.hero{background:linear-gradient(160deg,#1e2761,#141a47);color:#fff;padding:56px;display:flex;flex-direction:column;justify-content:space-between}
+.logo{display:flex;align-items:center;gap:12px;font-weight:700}
+.logo i{width:34px;height:34px;border-radius:9px;background:var(--accent);display:grid;place-items:center;font-style:normal}
+.hero h1{font-size:34px;line-height:1.3;margin:120px 0 16px}
+.hero p{color:#c9cfee;line-height:1.6;max-width:380px}
+.hero ul{list-style:none;padding:0;margin:0;color:#c9cfee;font-size:14px}
+.hero li{margin:12px 0;display:flex;gap:12px;align-items:center}
+.hero li b{width:26px;height:26px;border-radius:7px;background:#2b3580;display:grid;place-items:center;font-size:12px}
+main{display:grid;place-items:center;padding:32px}
+.card{width:100%;max-width:420px;background:#fff;border-radius:18px;padding:40px;box-shadow:0 12px 40px rgba(30,39,97,.1)}
+h2{margin:0 0 6px;font-size:24px}.sub{margin:0 0 22px;color:var(--muted);font-size:14px}
+.tabs{display:grid;grid-template-columns:repeat(3,1fr);background:var(--bg);border-radius:10px;padding:4px;margin-bottom:20px}
+.tabs button{border:0;background:none;padding:10px;border-radius:8px;font-size:14px;color:var(--muted);cursor:pointer}
+.tabs button[aria-pressed=true]{background:#fff;color:var(--navy);font-weight:700;box-shadow:0 1px 4px rgba(0,0,0,.08)}
+label{display:block;font-size:13px;font-weight:700;margin:14px 0 6px}
+input{width:100%;padding:12px 14px;border:1px solid var(--line);border-radius:10px;font-size:15px}
+input:focus{outline:2px solid var(--accent);border-color:transparent}
+.hint{font-size:12px;color:var(--muted);margin-top:5px}
+.err{color:var(--err);font-size:13px;min-height:20px;margin-top:12px}
+.primary{width:100%;margin-top:6px;padding:14px;border:0;border-radius:10px;background:var(--accent);color:#fff;font-size:16px;font-weight:700;cursor:pointer}
+.primary:disabled{opacity:.6;cursor:wait}
+.switch{text-align:center;margin-top:22px;font-size:14px;color:var(--muted)}
+.switch a{color:var(--navy);font-weight:700;cursor:pointer;text-decoration:none;margin-left:4px}
+.ok{color:#137333;font-size:13px;margin-top:12px}
+[hidden]{display:none!important}
+@media(max-width:800px){body{grid-template-columns:1fr}.hero{display:none}}
+</style>
+</head>
+<body>
+<section class="hero">
+  <div class="logo"><i>A</i> 자동화 검증시스템</div>
+  <div><h1>암호모듈 시험·검증<br>온라인 서비스</h1>
+  <p>CAVP 시험 신청부터 검증서 이력 조회, 위변조 탐지까지 한곳에서 관리하세요.</p></div>
+  <ul><li><b>✓</b>가명·익명 정보 처리로 개인정보 보호 강화</li><li><b>✓</b>CAVP 시험 진행 상태 실시간 조회</li><li><b>✓</b>검증서 위변조 자동 탐지</li></ul>
+</section>
+<main>
+<form class="card" id="form" novalidate>
+  <h2 id="title">로그인</h2>
+  <p class="sub" id="sub">사용자 유형을 선택하고 로그인하세요</p>
+  <div class="tabs" id="tabs" role="group" aria-label="사용자 유형">
+    <button type="button" data-type="individual" aria-pressed="true">개인</button>
+    <button type="button" data-type="company" aria-pressed="false">기업</button>
+    <button type="button" data-type="institution" aria-pressed="false">기관</button>
+  </div>
+  <label for="username">아이디</label>
+  <input id="username" name="username" autocomplete="username" placeholder="영문·숫자·밑줄 4~20자" maxlength="20">
+  <label for="password">비밀번호</label>
+  <input id="password" name="password" type="password" autocomplete="current-password" placeholder="••••••••" maxlength="64">
+  <div class="hint" id="pwhint" hidden>8~64자, 영문과 숫자를 각각 1자 이상 포함</div>
+  <div id="signup-only" hidden>
+    <label for="password2">비밀번호 확인</label>
+    <input id="password2" type="password" autocomplete="new-password" maxlength="64">
+    <div id="org-wrap" hidden><label for="org_code">기관 코드</label><input id="org_code" name="org_code" maxlength="50" placeholder="소속 기관 코드"></div>
+  </div>
+  <div class="err" id="msg" role="alert" aria-live="polite"></div>
+  <button class="primary" id="submit" type="submit">로그인</button>
+  <div class="switch"><span id="switch-text">계정이 없으신가요?</span><a id="switch" role="button" tabindex="0">회원가입</a></div>
+</form>
+</main>
+<script>
+const $ = id => document.getElementById(id);
+let mode = "login", type = "individual";
+function render() {
+  const su = mode === "signup";
+  $("title").textContent = su ? "회원가입" : "로그인";
+  $("sub").textContent = su ? "사용자 유형을 선택하고 정보를 입력하세요" : "사용자 유형을 선택하고 로그인하세요";
+  $("submit").textContent = su ? "가입하기" : "로그인";
+  $("switch-text").textContent = su ? "이미 계정이 있으신가요?" : "계정이 없으신가요?";
+  $("switch").textContent = su ? "로그인" : "회원가입";
+  $("signup-only").hidden = !su; $("pwhint").hidden = !su;
+  $("org-wrap").hidden = !(su && type !== "individual");
+  $("password").autocomplete = su ? "new-password" : "current-password";
+  $("msg").textContent = ""; $("msg").className = "err";
+  document.querySelectorAll("#tabs button").forEach(b => b.setAttribute("aria-pressed", b.dataset.type === type));
+}
+document.querySelectorAll("#tabs button").forEach(b => b.onclick = () => { type = b.dataset.type; render(); });
+$("switch").onclick = () => { mode = mode === "login" ? "signup" : "login"; render(); };
+$("switch").onkeydown = e => { if (e.key === "Enter" || e.key === " ") $("switch").click(); };
+function fail(t) { $("msg").className = "err"; $("msg").textContent = t; }
+async function post(url, body) {
+  const r = await fetch(url, {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)});
+  let data = {}; try { data = await r.json(); } catch (_) {}
+  return {ok: r.ok, status: r.status, data};
+}
+$("form").onsubmit = async e => {
+  e.preventDefault();
+  const username = $("username").value.trim(), password = $("password").value;
+  if (!username || !password) return fail("아이디와 비밀번호를 입력해 주세요.");
+  $("submit").disabled = true; $("msg").textContent = "";
+  try {
+    if (mode === "signup") {
+      if (password !== $("password2").value) return fail("비밀번호 확인이 일치하지 않습니다.");
+      const body = {username, password, user_type: type};
+      if (type !== "individual") body.org_code = $("org_code").value;
+      const r = await post("/api/auth/signup", body);
+      if (!r.ok) return fail(r.data.error ? r.data.error.message : "가입에 실패했습니다.");
+      mode = "login"; render();
+      $("msg").className = "ok"; $("msg").textContent = "가입이 완료되었습니다. 로그인해 주세요.";
+      $("password").value = ""; return;
+    }
+    const r = await post("/api/auth/login", {username, password});
+    if (!r.ok) return fail(r.data.error ? r.data.error.message : "로그인에 실패했습니다.");
+    if (r.data.user_type !== type) {
+      await post("/api/auth/logout", {});
+      return fail("선택한 사용자 유형과 계정 유형이 다릅니다.");
+    }
+    location.href = "/dashboard";
+  } catch (_) { fail("서버에 연결할 수 없습니다."); }
+  finally { $("submit").disabled = false; }
+};
+render();
+</script>
+</body></html>

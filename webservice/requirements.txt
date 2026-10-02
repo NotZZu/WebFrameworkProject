@@ -1,0 +1,6 @@
+Flask>=3.0
+SQLAlchemy>=2.0
+bcrypt>=4.0
+pytest>=8.0
+pytest-cov>=5.0
+# E2E(선택): playwright>=1.40

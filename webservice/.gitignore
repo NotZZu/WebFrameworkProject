@@ -1,0 +1,6 @@
+app.db
+storage/
+__pycache__/
+.pytest_cache/
+*.pyc
+shots/

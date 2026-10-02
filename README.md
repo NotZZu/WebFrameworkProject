@@ -41,3 +41,12 @@ ETRI 부설 국가보안기술연구소가 발주한 실제 과업지시서 「�
 | 안정화 | 14~15주 | 결과 보완, 최종 점검, 매뉴얼·산출물 정리, 발표자료 준비 |
 
 진행 상황과 세부 작업은 이 저장소의 [Issues](../../issues)에서 관리합니다.
+
+## 개발 방식 (TDD + 자동 병합)
+
+1. 서브 브랜치(`feature/*`, `fix/*`)에서 개발 → `python webservice/tools/ship.py "커밋 메시지"` 로 푸시
+2. GitHub Actions 가 main 과 합친 상태로 단위·통합·브라우저 E2E 테스트 자동 실행
+3. **전부 통과하면 main 에 자동 병합**(실패하면 병합되지 않고 브랜치 유지)
+4. 병합 후 `python webservice/tools/ship.py --sync` 로 로컬 main 최신화
+
+아직 구현하지 않은 케이스는 `webservice/tests/red_cases.txt` 에 등록(기대된 실패, xfail strict). 구현해서 통과하면 목록에서 삭제합니다. 목록에 남은 케이스가 예기치 않게 통과해도 CI 가 실패하므로 목록 관리가 강제됩니다.
