@@ -30,7 +30,7 @@ jobs:
         if: github.ref != 'refs/heads/main'
         working-directory: webservice
         run: python tools/check_commits.py origin/main "${{ github.sha }}"
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.11"
           cache: pip
