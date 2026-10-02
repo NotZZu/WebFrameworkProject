@@ -22,3 +22,6 @@ python scripts/export_cases.py      # @case 메타데이터 → cases.json
 
 ## 구조
 `app/services/*` 서비스 · `app/api/*` REST API · `app/pages.py`+`app/templates` 화면 · `tests/{unit,integration,e2e}`
+
+## 시험 관리 엑셀
+`python tools/update_tracker.py --run` → `tracker/테스트관리.xlsx` 갱신 (대시보드 / 케이스관리 / 케이스별결과 / 실행이력). 노란 칸(화면·우선순위·비고)만 직접 수정.

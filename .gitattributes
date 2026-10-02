@@ -1,0 +1,3 @@
+# 시험 진척도 산출물은 CI 가 갱신 — 병합 충돌 시 main(최신) 쪽을 유지
+webservice/tracker/*.xlsx merge=ours
+assets/tracker/** merge=ours

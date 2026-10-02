@@ -25,6 +25,9 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config merge.ours.driver true
+          # .gitattributes 가 아직 main 에 없어도 적용되도록 로컬 속성 파일에도 기록
+          printf 'webservice/tracker/*.xlsx merge=ours\nassets/tracker/** merge=ours\n' >> .git/info/attributes
           git merge --no-commit --no-ff origin/main || { echo "::error::main 과 충돌 — 로컬에서 main 을 병합해 해결 후 다시 푸시하세요"; exit 1; }
       - name: 커밋 메시지 규칙 검사
         if: github.ref != 'refs/heads/main'
@@ -47,6 +50,13 @@ jobs:
             python tools/ci_summary.py report.xml >> "$GITHUB_STEP_SUMMARY" || true
             python tools/make_test_report.py report.xml cases.json test-artifacts/시험결과서.html >> "$GITHUB_STEP_SUMMARY"
           fi
+      - name: 시험 관리 엑셀 갱신 (결과 XML 파싱 → 실행이력·케이스별결과·대시보드)
+        if: always()
+        run: |
+          if [ -f report.xml ]; then
+            python tools/update_tracker.py --xml report.xml --cases cases.json
+            python tools/export_dashboard.py --out ../assets/tracker
+          fi
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -54,10 +64,49 @@ jobs:
           path: |
             webservice/report.xml
             webservice/test-artifacts/
+            webservice/tracker/
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: tracker-pages
+          path: assets/tracker/
+          if-no-files-found: ignore
+
+  publish:                    # 테스트 성공/실패와 무관하게 결과를 즉시 main(Pages)에 반영
+    needs: test
+    if: always() && needs.test.result != 'skipped' && needs.test.result != 'cancelled'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    concurrency:
+      group: merge-main
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - uses: actions/download-artifact@v4
+        with:
+          name: test-report
+          path: ci-artifacts
+      - uses: actions/download-artifact@v4
+        with:
+          name: tracker-pages
+          path: ci-pages
+      - name: 시험 진척도(엑셀·Pages 대시보드)를 main 에 기록
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          mkdir -p webservice/tracker assets/tracker
+          cp ci-artifacts/tracker/테스트관리.xlsx webservice/tracker/테스트관리.xlsx
+          cp -r ci-pages/. assets/tracker/
+          git add webservice/tracker/테스트관리.xlsx assets/tracker
+          git diff --cached --quiet || { git commit -m "chore: 시험 진척도 갱신 (${{ github.ref_name }}, 테스트 ${{ needs.test.result }})"; git push origin main; }
 
   merge:
-    needs: test               # test 가 전부 성공해야 실행
-    if: github.event_name == 'push' && github.ref != 'refs/heads/main'
+    needs: [test, publish]    # test 가 전부 성공해야 실행(진척도 기록 후 병합)
+    if: needs.test.result == 'success' && github.event_name == 'push' && github.ref != 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -73,6 +122,9 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config merge.ours.driver true
+          # .gitattributes 가 아직 main 에 없어도 적용되도록 로컬 속성 파일에도 기록
+          printf 'webservice/tracker/*.xlsx merge=ours\nassets/tracker/** merge=ours\n' >> .git/info/attributes
           git merge --no-ff "${{ github.sha }}" -m "Merge ${{ github.ref_name }} (CI 통과 자동 병합)"
           git push origin main
       - name: 병합 완료한 브랜치 삭제
