@@ -26,6 +26,8 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git config merge.ours.driver true
+          # .gitattributes 가 아직 main 에 없어도 적용되도록 로컬 속성 파일에도 기록
+          printf 'webservice/tracker/*.xlsx merge=ours\nassets/tracker/** merge=ours\n' >> .git/info/attributes
           git merge --no-commit --no-ff origin/main || { echo "::error::main 과 충돌 — 로컬에서 main 을 병합해 해결 후 다시 푸시하세요"; exit 1; }
       - name: 커밋 메시지 규칙 검사
         if: github.ref != 'refs/heads/main'
@@ -121,6 +123,8 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git config merge.ours.driver true
+          # .gitattributes 가 아직 main 에 없어도 적용되도록 로컬 속성 파일에도 기록
+          printf 'webservice/tracker/*.xlsx merge=ours\nassets/tracker/** merge=ours\n' >> .git/info/attributes
           git merge --no-ff "${{ github.sha }}" -m "Merge ${{ github.ref_name }} (CI 통과 자동 병합)"
           git push origin main
       - name: 병합 완료한 브랜치 삭제
