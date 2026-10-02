@@ -65,3 +65,17 @@ def test_update_preserves_manual_columns_and_appends_history(files):
     assert (ws["D5"].value, ws["H5"].value, ws["I5"].value) == ("SC-02", "Could", "직접 적은 메모")
     hist = [r for r in wb["실행이력"].iter_rows(min_row=4, max_col=3, values_only=True) if r[0]]
     assert [h[2] for h in hist] == ["c1", "c2"]
+
+
+def test_export_dashboard_html_reflects_results(files, tmp_path):
+    xml, cases, out = files
+    ut.update(str(xml), str(cases), str(out), branch="feature/x", commit="abc1234")
+    spec = importlib.util.spec_from_file_location(
+        "export_dashboard", pathlib.Path(__file__).resolve().parents[2] / "tools" / "export_dashboard.py")
+    ed = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(ed)
+    data, hist = ed.read(str(out))
+    st = {c["id"]: c["status"] for c in data}
+    assert st == {"UT-AUTH-01": "PASS", "UT-AUTH-02": "FAIL", "UT-PRIV-01": "RED"}
+    page = ed.render(data, hist)
+    assert "UT-AUTH-02" in page and "abc1234" in page and "test-tracker.xlsx" in page
