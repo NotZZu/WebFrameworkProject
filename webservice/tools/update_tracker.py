@@ -56,9 +56,21 @@ def natural_key(case_id: str):
 
 def default_screen(c) -> str:
     cid = c["id"]
+    m = re.fullmatch(r"IT-(\d+)", cid)
+    if cid.startswith(("UT-DASH", "ST-02")) or (m and 33 <= int(m.group(1)) <= 40):
+        return "SC-02"
     if cid.startswith("ST-01") or cid.startswith("UT-SEED") or cid in ("IT-11", "IT-12", "IT-31", "IT-32"):
         return "SC-01" if cid.startswith("ST-01") else "공통"
     return REQ_SCREEN.get(c["req"], "공통")
+
+
+def screen_of(manual_row, c) -> str:
+    """수동 입력 화면값 우선. 단, 예전 자동 기본값(요구사항 매핑)이 그대로 남은 경우는 새 기본값으로 교정."""
+    cur = manual_row.get("screen")
+    legacy = REQ_SCREEN.get(c["req"], "공통")
+    if not cur or (cur == legacy and default_screen(c) != legacy):
+        return default_screen(c)
+    return cur
 
 
 def parse_junit(xml_path):
@@ -192,7 +204,7 @@ def build_workbook(cases, results, history, manual, out_path):
     for i, c in enumerate(cases):
         r = CASE_FIRST + i
         m = manual.get(c["id"], {})
-        vals = [c["id"], LEVEL_KO.get(c["id"][:2], "기타"), c["req"], m.get("screen") or default_screen(c),
+        vals = [c["id"], LEVEL_KO.get(c["id"][:2], "기타"), c["req"], screen_of(m, c),
                 KIND_KO.get(c["kind"], c["kind"]), c["title"], c["expect"],
                 m.get("priority") or REQ_PRIORITY.get(c["req"], "Could"), m.get("note")]
         for j, v in enumerate(vals, 1):

@@ -79,3 +79,18 @@ def test_export_dashboard_html_reflects_results(files, tmp_path):
     assert st == {"UT-AUTH-01": "PASS", "UT-AUTH-02": "FAIL", "UT-PRIV-01": "RED"}
     page = ed.render(data, hist)
     assert "UT-AUTH-02" in page and "abc1234" in page and "test-tracker.xlsx" in page
+
+
+def test_sc02_cases_map_to_dashboard_screen():
+    mk = lambda i, req="FR-03": {"id": i, "req": req}
+    assert ut.default_screen(mk("UT-DASH-01")) == "SC-02"
+    assert ut.default_screen(mk("IT-33")) == "SC-02" and ut.default_screen(mk("IT-40")) == "SC-02"
+    assert ut.default_screen(mk("ST-02-N1")) == "SC-02"
+    assert ut.default_screen(mk("IT-41")) == "SC-04"
+
+
+def test_legacy_default_screen_is_corrected_but_manual_kept():
+    c = {"id": "IT-33", "req": "FR-03"}
+    assert ut.screen_of({"screen": "SC-04"}, c) == "SC-02"      # 예전 자동값 → 교정
+    assert ut.screen_of({"screen": "SC-07"}, c) == "SC-07"      # 사용자가 직접 바꾼 값 유지
+    assert ut.screen_of({}, c) == "SC-02"
