@@ -960,9 +960,10 @@
 <div class="doc-embed">
   <div class="doc-embed-bar">
     <span class="doc-embed-label">📊 시험 관리 엑셀 · 진척도 대시보드</span>
-    <div class="doc-embed-actions"><a class="dl-btn" href="assets/tracker/test-tracker.xlsx" download>엑셀(XLSX) 다운로드</a><a class="dl-btn" href="assets/tracker/dashboard.html" target="_blank" rel="noopener">새 창에서 열기</a></div>
+    <div class="doc-embed-actions"><a class="dl-btn" href="assets/tracker/test-tracker.xlsx" download>엑셀(XLSX) 다운로드</a><a class="dl-btn" href="assets/tracker/dashboard.html?t=1" onclick="this.href='assets/tracker/dashboard.html?t='+Date.now()" target="_blank" rel="noopener">새 창에서 열기</a></div>
   </div>
-  <iframe class="doc-frame" src="assets/tracker/dashboard.html" loading="lazy" style="height:85vh"></iframe>
+  <iframe class="doc-frame" id="tracker-frame" src="assets/tracker/dashboard.html" loading="lazy" style="height:85vh"></iframe>
+  <script>document.getElementById("tracker-frame").src="assets/tracker/dashboard.html?t="+Date.now();</script>
 </div>
 
 </section>
