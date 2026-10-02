@@ -1,5 +1,7 @@
 # 자동화 검증시스템 서비스 개선 및 확장 기능 개발
 
+[![CI](https://github.com/NotZZu/WebFrameworkProject/actions/workflows/ci.yml/badge.svg)](https://github.com/NotZZu/WebFrameworkProject/actions/workflows/ci.yml)
+
 인하공업전문대학 컴퓨터정보공학과(심화) **웹프레임워크** 교과목 팀별(1인) 프로젝트.
 
 ETRI 부설 국가보안기술연구소가 발주한 실제 과업지시서 「자동화 검증시스템 서비스 개선 및 확장 기능 개발」을 벤치마킹하여, 축소된 웹 서비스 프로토타입과 **Selenium 기반 웹 테스트 자동화 프레임워크**를 15주간 1인이 구현하는 학습 프로젝트입니다.
@@ -41,3 +43,14 @@ ETRI 부설 국가보안기술연구소가 발주한 실제 과업지시서 「�
 | 안정화 | 14~15주 | 결과 보완, 최종 점검, 매뉴얼·산출물 정리, 발표자료 준비 |
 
 진행 상황과 세부 작업은 이 저장소의 [Issues](../../issues)에서 관리합니다.
+
+## 개발 방식 (TDD + 자동 병합)
+
+1. 서브 브랜치(`feature/*`, `fix/*`)에서 개발 → `python webservice/tools/ship.py "커밋 메시지"` 로 푸시
+2. GitHub Actions 가 main 과 합친 상태로 단위·통합·브라우저 E2E 테스트 자동 실행
+3. **전부 통과하면 main 에 자동 병합**(실패하면 병합되지 않고 브랜치 유지)
+4. 병합 후 `python webservice/tools/ship.py --sync` 로 로컬 main 최신화
+
+아직 구현하지 않은 케이스는 `webservice/tests/red_cases.txt` 에 등록(기대된 실패, xfail strict). 구현해서 통과하면 목록에서 삭제합니다. 목록에 남은 케이스가 예기치 않게 통과해도 CI 가 실패하므로 목록 관리가 강제됩니다.
+
+CI 가 추가로 수행하는 것: 커밋 메시지 규칙 검사 · 커버리지 하한선(`webservice/tools/coverage_floor.txt`, 올리기만 가능) · 케이스 ID별 **시험결과서(HTML)** 와 브라우저 E2E 스크린샷을 결과물(Artifacts)로 보관.

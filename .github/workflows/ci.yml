@@ -1,0 +1,79 @@
+name: CI (test → auto-merge)
+
+# 서브 브랜치(feature/**, fix/**)에 푸시하면: main 과 합친 상태로 테스트 → 전부 통과하면 main 에 자동 병합.
+on:
+  push:
+    branches: ["feature/**", "fix/**", "main"]   # main 푸시는 검증만(병합 없음)
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true   # 같은 브랜치에 연달아 푸시하면 이전 실행 취소
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: webservice
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: main 과 병합한 상태로 테스트 (병합 결과를 검증)
+        working-directory: .
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git merge --no-commit --no-ff origin/main || { echo "::error::main 과 충돌 — 로컬에서 main 을 병합해 해결 후 다시 푸시하세요"; exit 1; }
+      - name: 커밋 메시지 규칙 검사
+        if: github.ref != 'refs/heads/main'
+        working-directory: webservice
+        run: python tools/check_commits.py origin/main "${{ github.sha }}"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: webservice/requirements.txt
+      - run: pip install -r requirements.txt playwright
+      - run: playwright install --with-deps chromium
+      - name: pytest (단위 + 통합 + 브라우저 E2E + 커버리지 하한)
+        run: python -m pytest -q --junitxml=report.xml --cov=app --cov-report=term --cov-fail-under=$(cat tools/coverage_floor.txt)
+      - name: 결과 요약 · 시험결과서 생성
+        if: always()
+        run: |
+          if [ -f report.xml ]; then
+            python scripts/export_cases.py cases.json
+            python tools/ci_summary.py report.xml >> "$GITHUB_STEP_SUMMARY" || true
+            python tools/make_test_report.py report.xml cases.json test-artifacts/시험결과서.html >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-report
+          path: |
+            webservice/report.xml
+            webservice/test-artifacts/
+
+  merge:
+    needs: test               # test 가 전부 성공해야 실행
+    if: github.event_name == 'push' && github.ref != 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    concurrency:
+      group: merge-main       # 병합은 한 번에 하나씩
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: 테스트를 통과한 커밋을 main 에 병합
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git merge --no-ff "${{ github.sha }}" -m "Merge ${{ github.ref_name }} (CI 통과 자동 병합)"
+          git push origin main
+      - name: 병합 완료한 브랜치 삭제
+        run: git push origin --delete "${{ github.ref_name }}" || true

@@ -1,0 +1,10 @@
+app.db
+storage/
+__pycache__/
+.pytest_cache/
+*.pyc
+shots/
+test-artifacts/
+report.xml
+cases.json
+.coverage
