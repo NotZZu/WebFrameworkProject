@@ -24,10 +24,12 @@ def create_app(config: dict | None = None) -> Flask:
     init_db(app.engine)
 
     from .api import auth as auth_api
+    from .api import dashboard as dashboard_api
     from .api.helpers import register_error_handlers
     from . import pages
 
     app.register_blueprint(auth_api.bp)
+    app.register_blueprint(dashboard_api.bp)
     app.register_blueprint(pages.bp)
     register_error_handlers(app)
     return app
