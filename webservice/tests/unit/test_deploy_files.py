@@ -59,3 +59,26 @@ def test_shell_scripts_have_valid_syntax(script):
 def test_no_secret_values_committed():
     text = "".join(p.read_text(encoding="utf-8", errors="ignore") for p in DEPLOY.iterdir() if p.is_file())
     assert "AKIA" not in text and "aws_secret_access_key" not in text.lower()
+
+
+def test_cloudformation_serves_https_via_cloudfront():
+    t = load("cloudformation.yml")
+    cdn = [r for r in t["Resources"].values() if r["Type"] == "AWS::CloudFront::Distribution"]
+    assert len(cdn) == 2
+    for c in cdn:
+        b = c["Properties"]["DistributionConfig"]["DefaultCacheBehavior"]
+        assert b["ViewerProtocolPolicy"] == "redirect-to-https"
+
+
+def test_cloudformation_has_budget_guard_that_stops_ec2():
+    t = load("cloudformation.yml")
+    types = {r["Type"] for r in t["Resources"].values()}
+    assert {"AWS::Budgets::Budget", "AWS::Budgets::BudgetsAction"} <= types
+    act = t["Resources"]["BudgetStopAction"]["Properties"]
+    assert act["Definition"]["SsmActionDefinition"]["Subtype"] == "STOP_EC2_INSTANCES"
+
+
+def test_demo_reads_service_url_from_env_file():
+    c = load("docker-compose.yml")
+    assert c["services"]["demo"]["env_file"] == ["service.env"]
+    assert (DEPLOY / "service.env").exists()

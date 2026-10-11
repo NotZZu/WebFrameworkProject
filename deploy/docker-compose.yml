@@ -12,6 +12,5 @@ services:
     build: { context: .., dockerfile: deploy/Dockerfile.demo }
     restart: unless-stopped
     ports: ["8080:8000"]
-    environment:
-      SERVICE_URL: ${SERVICE_URL}
+    env_file: [service.env]   # SERVICE_URL (HTTPS 주소) - 저장소에서 관리
     shm_size: "256m"
