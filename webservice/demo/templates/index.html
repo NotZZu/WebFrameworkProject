@@ -38,6 +38,12 @@ pre{background:#10153a;color:#d7dcff;padding:14px;border-radius:10px;font-size:1
 .steps{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
 .step{background:var(--bg);border-radius:10px;padding:14px;font-size:13px;line-height:1.6}.step b{display:block;color:var(--accent);margin-bottom:4px}
 .ci a{color:var(--accent);text-decoration:none}.ci li{margin:6px 0;font-size:13.5px}
+tr.case{cursor:pointer}tr.case:hover td{background:#f7f8fd}tr.case.open td{background:#eef1ff}
+tr.detail td{background:#f7f8fd;padding:14px 16px}.dgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+.dbox{background:#fff;border:1px solid var(--line);border-radius:10px;padding:12px 14px;font-size:13px;line-height:1.7}
+.dbox h4{margin:0 0 6px;font-size:13px;color:var(--accent)}.dbox.pass{border-color:#b7dfba}.dbox.fail{border-color:#f0b4ae}.dbox.red{border-color:#f3b5cb}
+.chev{color:var(--muted);font-size:11px;margin-right:6px}
+@media(max-width:800px){.dgrid{grid-template-columns:1fr}}
 details summary{cursor:pointer;color:var(--accent);font-size:13px}
 @media(max-width:800px){.kpis{grid-template-columns:repeat(2,1fr)}.steps{grid-template-columns:1fr 1fr}header{padding:22px 18px}}
 </style>
@@ -75,6 +81,7 @@ details summary{cursor:pointer;color:var(--accent);font-size:13px}
 
   <section class="card">
     <h2>케이스별 결과 <span id="rowcount" style="color:var(--muted);font-size:13px;font-weight:400"></span></h2>
+    <div class="hint" style="margin:-6px 0 10px">각 줄을 클릭하면 <b>어떤 시험인지 · 어떻게 작동하고 어떤 결과가 나와야 하는지 · 실제 결과</b>를 볼 수 있습니다.</div>
     <div class="scroll"><table><thead><tr><th style="width:90px">ID</th><th style="width:70px">구분</th><th>시험 항목</th><th style="width:100px">결과</th><th style="width:70px">시간</th></tr></thead><tbody id="rows"></tbody></table></div>
   </section>
 
@@ -112,16 +119,49 @@ const KIND = {positive: "정상", negative: "비정상", boundary: "경계", sec
 let cases = {}, rid = null, timer = null, next = 0;
 $("svc").href = "{{ service_url }}" || `http://${location.hostname}`;
 
-fetch("/api/cases").then(r => r.json()).then(list => { list.forEach(c => cases[c.id] = c); }).catch(() => {});
+const painted = [];
+fetch("/api/cases").then(r => r.json()).then(list => { list.forEach(c => cases[c.id] = c); painted.forEach(f => f()); }).catch(() => {});
 
+const LEVEL_DESC = {UT: "단위 시험 — 프로그램의 가장 작은 부분(함수 하나)만 떼어 내 입력을 넣고 결과를 확인합니다.",
+  IT: "통합 시험 — 서비스를 실제로 구동해 화면 뒤의 요청(API)을 보내고, 여러 부분이 맞물려 동작하는지 확인합니다.",
+  ST: "시스템 시험 — 실제 브라우저를 열어 사용자가 하듯 화면을 조작하며 처음부터 끝까지 확인합니다."};
+const KIND_DESC = {positive: "정상 입력을 넣었을 때 올바르게 동작하는지 확인", negative: "잘못된 입력·예외 상황에서 안전하게 거절/처리하는지 확인",
+  boundary: "허용 범위의 경계값(최소·최대 등)에서 정확히 동작하는지 확인", security: "공격·권한 없는 접근을 막고 정보를 보호하는지 확인"};
+function actual(e) {
+  if (e.status === "pass") return {cls: "pass", head: "기대 결과와 일치했습니다 (통과)", body: `시험을 실제로 실행한 결과, 위의 기대 결과가 그대로 확인되었습니다.`};
+  if (e.status === "fail") return {cls: "fail", head: "기대와 다른 결과가 나왔습니다 (실패)", body: `실제 결과: ${esc(e.message || "검증 조건이 맞지 않음")}<br>실패가 하나라도 있으면 병합이 차단됩니다.`};
+  if (e.status === "red") return {cls: "red", head: "아직 구현 전입니다 (구현 전 · Red)", body: "TDD 방식에 따라 시험을 먼저 작성해 두었고, 기능이 아직 없어 실패하는 것이 정상입니다. 구현을 마치면 통과로 바뀝니다."};
+  return {cls: "", head: "건너뛰었습니다", body: "이번 실행에서는 조건이 맞지 않아 실행하지 않았습니다."};
+}
+function detailHtml(e, c, id, lv) {
+  const a = actual(e), kind = c.kind ? KIND[c.kind] : "";
+  const param = (e.nodeid.match(/\[(.+)\]$/) || [])[1];
+  return `<div class="dgrid">
+    <div class="dbox"><h4>① 어떤 시험인가요?</h4><b>${esc(c.title || "")}</b><br>
+      시험 번호 ${esc(id)} · 구분 ${lv}${kind ? ` · 유형 ${kind}` : ""}${c.req ? ` · 요구사항 ${esc(c.req)}` : ""}${param ? `<br>입력 값: <code>${esc(param)}</code>` : ""}</div>
+    <div class="dbox"><h4>② 어떻게 작동하고, 어떤 결과가 나와야 하나요?</h4>${LEVEL_DESC[id.slice(0, 2)] || ""}<br>${c.kind ? KIND_DESC[c.kind] + "합니다.<br>" : ""}<b>기대 결과:</b> ${esc(c.expect || "-")}</div>
+    <div class="dbox ${a.cls}"><h4>③ 실제 결과</h4><b>${a.head}</b><br>${a.body}<br><span style="color:var(--muted)">소요 시간 ${e.duration}초</span></div></div>`;
+}
 function addRow(e) {
-  const c = cases[e.case_id] || {};
   const id = e.case_id || "-";
-  const title = c.title || e.nodeid.split("::").slice(1).join(" › ");
   const lv = LEVEL[id.slice(0, 2)] || "도구";
   const tr = document.createElement("tr");
-  tr.innerHTML = `<td><b>${esc(id)}</b></td><td>${lv}</td><td>${esc(title)}${e.message ? `<br><small style="color:var(--fail)">${esc(e.message)}</small>` : ""}</td>` +
-    `<td><span class="badge b-${e.status}">${LABEL[e.status]}</span></td><td>${e.duration}s</td>`;
+  tr.className = "case";
+  const paint = () => {
+    const c = cases[e.case_id] || {};
+    const title = c.title || e.nodeid.split("::").slice(1).join(" › ");
+    const chev = tr.classList.contains("open") ? "▼" : "▶";
+    tr.innerHTML = `<td><span class="chev">${chev}</span><b>${esc(id)}</b></td><td>${lv}</td><td>${esc(title)}${e.message ? `<br><small style="color:var(--fail)">${esc(e.message)}</small>` : ""}</td>` +
+      `<td><span class="badge b-${e.status}">${LABEL[e.status]}</span></td><td>${e.duration}s</td>`;
+  };
+  paint(); painted.push(paint);
+  tr.onclick = () => {
+    const nx = tr.nextElementSibling;
+    if (nx && nx.classList.contains("detail")) { nx.remove(); tr.classList.remove("open"); paint(); return; }
+    const d = document.createElement("tr"); d.className = "detail";
+    d.innerHTML = `<td colspan="5">${detailHtml(e, cases[e.case_id] || {}, id, lv)}</td>`;
+    tr.after(d); tr.classList.add("open"); paint();
+  };
   $("rows").appendChild(tr);
 }
 function render(s) {
@@ -155,7 +195,7 @@ async function poll() {
 }
 function setBusy(b) { document.querySelectorAll("button.run").forEach(x => x.disabled = b); }
 document.querySelectorAll("button.run").forEach(b => b.onclick = async () => {
-  setBusy(true); $("rows").innerHTML = ""; $("shots").innerHTML = ""; $("shot-card").hidden = true; next = 0;
+  setBusy(true); $("rows").innerHTML = ""; painted.length = 0; $("shots").innerHTML = ""; $("shot-card").hidden = true; next = 0;
   const r = await fetch("/api/run", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({suite: b.dataset.suite})});
   const d = await r.json();
   if (!r.ok) { $("state").textContent = d.error; $("state").style.color = "var(--fail)"; setBusy(false); return; }

@@ -111,3 +111,9 @@ def test_service_healthz():
     c = create_app({"TESTING": True, "DATABASE_URL": "sqlite://", "SECRET_KEY": "x"}).test_client()
     r = c.get("/healthz")
     assert r.status_code == 200 and r.get_json() == {"status": "ok"}
+
+
+def test_index_has_clickable_case_detail(demo):
+    client, _ = demo
+    html = client.get("/").get_data(as_text=True)
+    assert "어떤 시험인가요" in html and "실제 결과" in html and "detailHtml" in html
