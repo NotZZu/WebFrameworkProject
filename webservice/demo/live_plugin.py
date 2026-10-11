@@ -19,6 +19,20 @@ def _emit(obj):
         f.write(json.dumps(obj, ensure_ascii=False) + "\n")
 
 
+def pytest_collection_modifyitems(config, items):
+    """DEMO_ONLY_CASE(쉼표로 구분한 케이스 번호들)가 지정되면 그 케이스의 시험만 남긴다(지정 실행)."""
+    only = {x for x in os.environ.get("DEMO_ONLY_CASE", "").split(",") if x}
+    if not only:
+        return
+    keep, drop = [], []
+    for it in items:
+        m = it.get_closest_marker("case")
+        (keep if m and m.args and m.args[0] in only else drop).append(it)
+    if drop:
+        config.hook.pytest_deselected(items=drop)
+        items[:] = keep
+
+
 def pytest_collection_finish(session):
     _emit({"type": "collected", "total": len(session.items)})
 

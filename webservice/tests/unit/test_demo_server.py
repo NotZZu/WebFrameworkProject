@@ -126,3 +126,29 @@ def test_index_script_defines_every_helper_it_calls(demo):
     js = re.findall(r"<script>(.*?)</script>", client.get("/").get_data(as_text=True), re.S)[-1]
     for fn in ("actual", "resultBox", "detailHtml", "paintRow", "mkRow", "addRow", "sortRows", "resetRows", "loadCases"):
         assert f"function {fn}(" in js, fn
+
+
+def test_run_picked_cases_only_runs_those(demo, monkeypatch, tmp_path):
+    client, r = demo
+    sample = tmp_path / "test_sample.py"
+    r.case_builder = lambda paths: [sys.executable, "-m", "pytest", "-p", "demo.live_plugin", "-p", "no:cacheprovider",
+                                   "-q", "-o", "addopts=", str(sample)]
+    monkeypatch.setattr(server_mod, "load_cases", lambda: [{"id": "X-2", "module": "test_sample"}])
+    res = client.post("/api/run", json={"cases": ["X-2"]})
+    assert res.status_code == 202
+    s = wait_done(client, res.get_json()["run_id"])
+    assert s["cases"] == ["X-2"] and s["done"] == 1 and s["results"][0]["case_id"] == "X-2"
+    assert s["counts"]["fail"] == 1 and s["counts"]["pass"] == 0
+
+
+def test_run_picked_cases_rejects_unknown_or_empty(demo, monkeypatch):
+    client, _ = demo
+    monkeypatch.setattr(server_mod, "load_cases", lambda: [{"id": "X-2", "module": "test_sample"}])
+    assert client.post("/api/run", json={"cases": ["NOPE-1"]}).status_code == 400
+    assert client.post("/api/run", json={"cases": []}).status_code == 400
+
+
+def test_index_has_pick_and_run_picked(demo):
+    client, _ = demo
+    html = client.get("/").get_data(as_text=True)
+    assert "run-picked" in html and "pickall" in html and "function startRun(" in html and "function pickedIds(" in html

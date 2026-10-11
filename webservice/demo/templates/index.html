@@ -26,6 +26,10 @@ button:disabled{opacity:.45;cursor:not-allowed}
 .kpi{background:var(--bg);border-radius:10px;padding:12px 14px}.kpi span{font-size:12px;color:var(--muted)}.kpi b{display:block;font-size:26px;margin-top:4px}
 .kpi.ok b{color:var(--ok)}.kpi.red b{color:var(--red)}.kpi.fail b{color:var(--fail)}
 #state{font-weight:700}
+button.runpick{background:#fff;color:var(--ok);border:1.5px solid var(--ok);border-radius:10px;padding:12px 20px;font-size:15px;font-weight:700;cursor:pointer}
+button.runpick:disabled{opacity:.45;cursor:not-allowed}
+.linkbtn{background:none;border:0;color:var(--accent);cursor:pointer;font-size:13px;text-decoration:underline;padding:0 4px}
+input.pick,#pickall{width:16px;height:16px;cursor:pointer}
 table{width:100%;border-collapse:collapse;font-size:13.5px;table-layout:fixed}
 #rows td,th{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 #rows tr.detail td{white-space:normal;overflow:visible}
@@ -68,6 +72,8 @@ details summary{cursor:pointer;color:var(--accent);font-size:13px}
       {% for key, (label, _) in suites.items() %}
       <button class="run {{ '' if key == 'all' else 'sec' }}" data-suite="{{ key }}">{{ label }} 실행</button>
       {% endfor %}
+      <button class="runpick" id="run-picked" disabled>지정 실행 (0)</button>
+      <button class="linkbtn" id="pick-clear" type="button">선택 해제</button>
     </div>
     <div class="hint">· 한 번에 한 건만 실행됩니다(브라우저 E2E 포함 전체 시험은 보통 1~2분).<br>· <b>구현 전(Red)</b>은 아직 구현하지 않아 실패하는 것이 정상인 케이스(TDD)이며, 실패(FAIL)가 0건이어야 병합됩니다.</div>
     <div class="bar"><i id="pbar"></i></div>
@@ -85,7 +91,7 @@ details summary{cursor:pointer;color:var(--accent);font-size:13px}
     <h2>케이스별 결과 <span id="rowcount" style="color:var(--muted);font-size:13px;font-weight:400"></span></h2>
     <div id="runnote" class="hint" style="margin:-6px 0 4px;color:var(--accent)"></div>
     <div class="hint" style="margin:-6px 0 10px">각 줄을 클릭하면 <b>어떤 시험인지 · 어떻게 작동하고 어떤 결과가 나와야 하는지 · 실제 결과</b>를 볼 수 있습니다.</div>
-    <div class="scroll"><table><thead><tr><th style="width:110px">ID</th><th style="width:64px">구분</th><th>시험 항목</th><th style="width:120px">결과</th><th style="width:80px">시간</th></tr></thead><tbody id="rows"></tbody></table></div>
+    <div class="scroll"><table><thead><tr><th style="width:34px"><input type="checkbox" id="pickall" title="전체 선택/해제"></th><th style="width:110px">ID</th><th style="width:64px">구분</th><th>시험 항목</th><th style="width:120px">결과</th><th style="width:76px">시간</th></tr></thead><tbody id="rows"></tbody></table></div>
   </section>
 
   <section class="card" id="shot-card" hidden>
@@ -122,7 +128,7 @@ const KIND = {positive: "정상", negative: "비정상", boundary: "경계", sec
 let cases = {}, rid = null, timer = null, next = 0;
 $("svc").href = "{{ service_url }}" || `http://${location.hostname}`;
 
-const rowsById = {}; let runFinished = false;
+const rowsById = {}; let runFinished = false, busy = false;
 const PRIO = {fail: 4, red: 3, skip: 2, pass: 1};
 function loadCases() {
   return fetch("/api/cases").then(r => r.json()).then(list => {
@@ -164,24 +170,31 @@ function detailHtml(r) {
 }
 function paintRow(r) {
   const c = r.c || {}, id = r.id, lv = LEVEL[id.slice(0, 2)] || "도구";
-  const st = r.results.length ? r.results.reduce((m, e) => PRIO[e.status] > PRIO[m] ? e.status : m, "pass") : (runFinished ? "norun" : "wait");
+  const st = r.results.length ? r.results.reduce((m, e) => PRIO[e.status] > PRIO[m] ? e.status : m, "pass") : (r.running ? "run" : runFinished ? "norun" : "wait");
   const msg = (r.results.find(e => e.status === "fail") || {}).message;
   const dur = r.results.length ? r.results.reduce((t, e) => t + e.duration, 0).toFixed(3) + "s" : "-";
-  const label = st === "norun" ? "이번 실행 제외" : LABEL[st];
+  const label = st === "norun" ? "이번 실행 제외" : st === "run" ? "실행 중…" : LABEL[st];
   const idText = r.c ? id : "(도구)", titleText = c.title || r.title || "";
-  r.tr.innerHTML = `<td title="${esc(id)}"><span class="chev">${r.dr ? "▼" : "▶"}</span><b>${esc(idText)}</b></td><td>${lv}</td><td title="${esc(titleText + (msg ? " — " + msg : ""))}">${esc(titleText)}${msg ? ` <small style="color:var(--fail)">${esc(msg)}</small>` : ""}</td>` +
-    `<td><span class="badge b-${st === "norun" ? "wait" : st}">${label}</span></td><td>${dur}</td>`;
+  r.tr.innerHTML = `<td><input type="checkbox" class="pick" ${r.picked ? "checked" : ""} ${(r.c && !busy) ? "" : "disabled"} title="지정 실행에 포함"></td><td title="${esc(id)}"><span class="chev">${r.dr ? "▼" : "▶"}</span><b>${esc(idText)}</b></td><td>${lv}</td><td title="${esc(titleText + (msg ? " — " + msg : ""))}">${esc(titleText)}${msg ? ` <small style="color:var(--fail)">${esc(msg)}</small>` : ""}</td>` +
+    `<td><span class="badge b-${st === "norun" || st === "run" ? "wait" : st}">${label}</span></td><td>${dur}</td>`;
   if (r.dr) r.dr.firstChild.innerHTML = detailHtml(r);
 }
 function mkRow(id, c, title) {
   const tr = document.createElement("tr"); tr.className = "case";
-  const r = {id, c, title, tr, dr: null, results: []}; rowsById[id] = r;
-  tr.onclick = () => {
+  const r = {id, c, title, tr, dr: null, results: [], picked: false}; rowsById[id] = r;
+  tr.onclick = (ev) => {
+    if (ev.target.closest && ev.target.closest("input.pick")) { r.picked = ev.target.checked; updatePick(); return; }
     if (r.dr) { r.dr.remove(); r.dr = null; tr.classList.remove("open"); }
-    else { r.dr = document.createElement("tr"); r.dr.className = "detail"; r.dr.innerHTML = "<td colspan='5'></td>"; tr.after(r.dr); tr.classList.add("open"); }
+    else { r.dr = document.createElement("tr"); r.dr.className = "detail"; r.dr.innerHTML = "<td colspan='6'></td>"; tr.after(r.dr); tr.classList.add("open"); }
     paintRow(r);
   };
   $("rows").appendChild(tr); paintRow(r); return r;
+}
+function pickedIds() { return Object.values(rowsById).filter(r => r.picked && r.c).map(r => r.id).sort(); }
+function updatePick() {
+  const n = pickedIds().length, all = Object.values(rowsById).filter(r => r.c);
+  $("run-picked").textContent = `지정 실행 (${n})`; $("run-picked").disabled = busy || n === 0;
+  $("pickall").checked = all.length > 0 && n === all.length; $("pickall").indeterminate = n > 0 && n < all.length;
 }
 function updateCount() { $("rowcount").textContent = `(${Object.keys(rowsById).length}건 · 클릭하면 상세)`; }
 function addRow(e) {
@@ -193,7 +206,7 @@ function sortRows() {
   const ids = Object.keys(rowsById).sort((a, b) => (rowsById[a].results.length ? 0 : 1) - (rowsById[b].results.length ? 0 : 1) || (a < b ? -1 : a > b ? 1 : 0));
   ids.forEach(id => { const r = rowsById[id]; $("rows").appendChild(r.tr); if (r.dr) r.tr.after(r.dr); });
 }
-function resetRows() { $("runnote").textContent = ""; runFinished = false; Object.values(rowsById).forEach(r => { r.results = []; paintRow(r); }); }
+function resetRows() { $("runnote").textContent = ""; runFinished = false; Object.values(rowsById).forEach(r => { r.results = []; r.running = false; paintRow(r); }); }
 function render(s) {
   s.results.forEach(addRow);
   next = s.next;
@@ -211,6 +224,12 @@ function render(s) {
   }
   const st = $("state");
   if (s.status === "running") { st.textContent = "실행 중…"; st.style.color = "var(--accent)"; }
+  else if (s.status === "done" && s.cases) {
+    s.cases.forEach(id => { const r = rowsById[id]; if (r) { r.running = false; paintRow(r); } });
+    $("runnote").textContent = `${s.label} 완료 — 선택한 케이스의 줄만 새 결과로 바뀌었습니다(나머지 줄은 이전 결과 유지).`;
+    const ok = s.counts.fail === 0;
+    st.textContent = ok ? "완료 — 실패 0건" : `완료 — 실패 ${s.counts.fail}건`; st.style.color = ok ? "var(--ok)" : "var(--fail)";
+  }
   else if (s.status === "done") {
     runFinished = true; Object.values(rowsById).forEach(r => { if (!r.results.length) paintRow(r); });
     const nExcluded = Object.values(rowsById).filter(r => !r.results.length).length;
@@ -218,7 +237,10 @@ function render(s) {
     sortRows();
     const ok = s.counts.fail === 0;
     st.textContent = ok ? "완료 — 실패 0건, 병합 가능 상태" : `완료 — 실패 ${s.counts.fail}건, 병합 차단`; st.style.color = ok ? "var(--ok)" : "var(--fail)";
-  } else { st.textContent = "실행 오류 (로그 확인)"; st.style.color = "var(--fail)"; }
+  } else {
+    st.textContent = "실행 오류 (로그 확인)"; st.style.color = "var(--fail)";
+    (s.cases || []).forEach(id => { if (rowsById[id]) { rowsById[id].running = false; paintRow(rowsById[id]); } });
+  }
 }
 async function poll() {
   try {
@@ -227,14 +249,29 @@ async function poll() {
     if (s.status !== "running") { clearInterval(timer); setBusy(false); }
   } catch (e) {}
 }
-function setBusy(b) { document.querySelectorAll("button.run").forEach(x => x.disabled = b); }
-document.querySelectorAll("button.run").forEach(b => b.onclick = async () => {
-  setBusy(true); resetRows(); $("shots").innerHTML = ""; $("shot-card").hidden = true; next = 0;
-  const r = await fetch("/api/run", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({suite: b.dataset.suite})});
+function setBusy(b) {
+  busy = b;
+  document.querySelectorAll("button.run").forEach(x => { x.disabled = b; });
+  document.getElementById("pickall").disabled = b;
+  Object.values(rowsById).forEach(r => { const cb = r.tr && r.tr.querySelector("input.pick"); if (cb) cb.disabled = b || !r.c; });
+  updatePick();
+}
+async function startRun(body, ids) {
+  setBusy(true); $("shots").innerHTML = ""; $("shot-card").hidden = true; next = 0;
+  if (ids) { $("runnote").textContent = ""; ids.forEach(id => { const row = rowsById[id]; row.results = []; row.running = true; paintRow(row); }); } else resetRows();
+  const r = await fetch("/api/run", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)});
   const d = await r.json();
-  if (!r.ok) { $("state").textContent = d.error; $("state").style.color = "var(--fail)"; setBusy(false); return; }
+  if (!r.ok) {
+    $("state").textContent = d.error; $("state").style.color = "var(--fail)";
+    (ids || []).forEach(id => { rowsById[id].running = false; paintRow(rowsById[id]); });
+    setBusy(false); return;
+  }
   rid = d.run_id; $("state").textContent = "시작 중…"; timer = setInterval(poll, 1000); poll();
-});
+}
+$("run-picked").onclick = () => { const ids = pickedIds(); if (ids.length && !busy) startRun({cases: ids}, ids); };
+$("pick-clear").onclick = () => { Object.values(rowsById).forEach(r => { r.picked = false; paintRow(r); }); updatePick(); };
+$("pickall").onclick = () => { const on = $("pickall").checked; Object.values(rowsById).forEach(r => { if (r.c) r.picked = on; paintRow(r); }); updatePick(); };
+document.querySelectorAll("button.run").forEach(b => b.onclick = () => startRun({suite: b.dataset.suite}));
 
 fetch("https://api.github.com/repos/NotZZu/WebFrameworkProject/actions/runs?per_page=6").then(r => r.json()).then(d => {
   const rows = (d.workflow_runs || []).filter(w => w.name.startsWith("CI")).slice(0, 5);
