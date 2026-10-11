@@ -27,7 +27,8 @@ button:disabled{opacity:.45;cursor:not-allowed}
 .kpi.ok b{color:var(--ok)}.kpi.red b{color:var(--red)}.kpi.fail b{color:var(--fail)}
 #state{font-weight:700}
 table{width:100%;border-collapse:collapse;font-size:13.5px;table-layout:fixed}
-td,th{overflow-wrap:anywhere}
+#rows td,th{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#rows tr.detail td{white-space:normal;overflow:visible}
 th{text-align:left;color:var(--muted);font-weight:600;padding:8px 6px;border-bottom:1px solid var(--line)}
 td{padding:8px 6px;border-bottom:1px solid #eef0f6;vertical-align:top}
 .badge{display:inline-block;padding:2px 10px;border-radius:99px;font-size:12px;font-weight:700;white-space:nowrap}
@@ -151,7 +152,7 @@ function detailHtml(r) {
   const box = resultBox(r);
   return `<div class="dgrid">
     <div class="dbox"><h4>① 어떤 시험인가요?</h4><b>${esc(c.title || r.title || "")}</b><br>
-      시험 번호 ${esc(id)} · 구분 ${lv}${kind ? ` · 유형 ${kind}` : ""}${c.req ? ` · 요구사항 ${esc(c.req)}` : ""}</div>
+      ${r.c ? "시험 번호" : "시험 위치"} ${esc(id)} · 구분 ${lv}${kind ? ` · 유형 ${kind}` : ""}${c.req ? ` · 요구사항 ${esc(c.req)}` : ""}</div>
     <div class="dbox"><h4>② 어떻게 작동하고, 어떤 결과가 나와야 하나요?</h4>${LEVEL_DESC[id.slice(0, 2)] || ""}<br>${c.kind ? KIND_DESC[c.kind] + "합니다.<br>" : ""}<b>기대 결과:</b> ${esc(c.expect || "-")}</div>
     <div class="dbox ${box.cls}"><h4>③ 실제 결과</h4>${box.html}</div></div>`;
 }
@@ -161,7 +162,8 @@ function paintRow(r) {
   const msg = (r.results.find(e => e.status === "fail") || {}).message;
   const dur = r.results.length ? r.results.reduce((t, e) => t + e.duration, 0).toFixed(3) + "s" : "-";
   const label = st === "norun" ? "이번 실행 제외" : LABEL[st];
-  r.tr.innerHTML = `<td><span class="chev">${r.dr ? "▼" : "▶"}</span><b>${esc(id)}</b></td><td>${lv}</td><td>${esc(c.title || r.title || "")}${msg ? `<br><small style="color:var(--fail)">${esc(msg)}</small>` : ""}</td>` +
+  const idText = r.c ? id : "(도구)", titleText = c.title || r.title || "";
+  r.tr.innerHTML = `<td title="${esc(id)}"><span class="chev">${r.dr ? "▼" : "▶"}</span><b>${esc(idText)}</b></td><td>${lv}</td><td title="${esc(titleText + (msg ? " — " + msg : ""))}">${esc(titleText)}${msg ? ` <small style="color:var(--fail)">${esc(msg)}</small>` : ""}</td>` +
     `<td><span class="badge b-${st === "norun" ? "wait" : st}">${label}</span></td><td>${dur}</td>`;
   if (r.dr) r.dr.firstChild.innerHTML = detailHtml(r);
 }
