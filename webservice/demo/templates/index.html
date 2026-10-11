@@ -26,7 +26,8 @@ button:disabled{opacity:.45;cursor:not-allowed}
 .kpi{background:var(--bg);border-radius:10px;padding:12px 14px}.kpi span{font-size:12px;color:var(--muted)}.kpi b{display:block;font-size:26px;margin-top:4px}
 .kpi.ok b{color:var(--ok)}.kpi.red b{color:var(--red)}.kpi.fail b{color:var(--fail)}
 #state{font-weight:700}
-table{width:100%;border-collapse:collapse;font-size:13.5px}
+table{width:100%;border-collapse:collapse;font-size:13.5px;table-layout:fixed}
+td,th{overflow-wrap:anywhere}
 th{text-align:left;color:var(--muted);font-weight:600;padding:8px 6px;border-bottom:1px solid var(--line)}
 td{padding:8px 6px;border-bottom:1px solid #eef0f6;vertical-align:top}
 .badge{display:inline-block;padding:2px 10px;border-radius:99px;font-size:12px;font-weight:700;white-space:nowrap}
@@ -81,8 +82,9 @@ details summary{cursor:pointer;color:var(--accent);font-size:13px}
 
   <section class="card">
     <h2>케이스별 결과 <span id="rowcount" style="color:var(--muted);font-size:13px;font-weight:400"></span></h2>
+    <div id="runnote" class="hint" style="margin:-6px 0 4px;color:var(--accent)"></div>
     <div class="hint" style="margin:-6px 0 10px">각 줄을 클릭하면 <b>어떤 시험인지 · 어떻게 작동하고 어떤 결과가 나와야 하는지 · 실제 결과</b>를 볼 수 있습니다.</div>
-    <div class="scroll"><table><thead><tr><th style="width:90px">ID</th><th style="width:70px">구분</th><th>시험 항목</th><th style="width:100px">결과</th><th style="width:70px">시간</th></tr></thead><tbody id="rows"></tbody></table></div>
+    <div class="scroll"><table><thead><tr><th style="width:110px">ID</th><th style="width:64px">구분</th><th>시험 항목</th><th style="width:120px">결과</th><th style="width:80px">시간</th></tr></thead><tbody id="rows"></tbody></table></div>
   </section>
 
   <section class="card" id="shot-card" hidden>
@@ -179,7 +181,11 @@ function addRow(e) {
   const r = rowsById[id] || mkRow(id, cases[e.case_id], e.nodeid.split("::").slice(1).join(" › "));
   r.results.push(e); paintRow(r);
 }
-function resetRows() { runFinished = false; Object.values(rowsById).forEach(r => { r.results = []; paintRow(r); }); }
+function sortRows() {
+  const ids = Object.keys(rowsById).sort((a, b) => (rowsById[a].results.length ? 0 : 1) - (rowsById[b].results.length ? 0 : 1) || (a < b ? -1 : a > b ? 1 : 0));
+  ids.forEach(id => { const r = rowsById[id]; $("rows").appendChild(r.tr); if (r.dr) r.tr.after(r.dr); });
+}
+function resetRows() { $("runnote").textContent = ""; runFinished = false; Object.values(rowsById).forEach(r => { r.results = []; paintRow(r); }); }
 function render(s) {
   s.results.forEach(addRow);
   next = s.next;
@@ -199,6 +205,9 @@ function render(s) {
   if (s.status === "running") { st.textContent = "실행 중…"; st.style.color = "var(--accent)"; }
   else if (s.status === "done") {
     runFinished = true; Object.values(rowsById).forEach(r => { if (!r.results.length) paintRow(r); });
+    const nExcluded = Object.values(rowsById).filter(r => !r.results.length).length;
+    $("runnote").textContent = nExcluded ? `${s.label} 결과 — 이번 실행에 포함되지 않은 ${nExcluded}건은 아래쪽에 "이번 실행 제외"로 모아 두었습니다.` : "";
+    sortRows();
     const ok = s.counts.fail === 0;
     st.textContent = ok ? "완료 — 실패 0건, 병합 가능 상태" : `완료 — 실패 ${s.counts.fail}건, 병합 차단`; st.style.color = ok ? "var(--ok)" : "var(--fail)";
   } else { st.textContent = "실행 오류 (로그 확인)"; st.style.color = "var(--fail)"; }
