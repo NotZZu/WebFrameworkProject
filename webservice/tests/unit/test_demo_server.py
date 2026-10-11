@@ -117,3 +117,12 @@ def test_index_has_clickable_case_detail(demo):
     client, _ = demo
     html = client.get("/").get_data(as_text=True)
     assert "어떤 시험인가요" in html and "실제 결과" in html and "detailHtml" in html
+
+
+def test_index_script_defines_every_helper_it_calls(demo):
+    """화면 스크립트가 호출하는 보조 함수가 모두 정의되어 있어야 한다(누락 시 상세 패널이 빈 채로 남음)."""
+    import re
+    client, _ = demo
+    js = re.findall(r"<script>(.*?)</script>", client.get("/").get_data(as_text=True), re.S)[-1]
+    for fn in ("actual", "resultBox", "detailHtml", "paintRow", "mkRow", "addRow", "sortRows", "resetRows", "loadCases"):
+        assert f"function {fn}(" in js, fn
