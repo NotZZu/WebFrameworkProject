@@ -55,6 +55,10 @@ ETRI 부설 국가보안기술연구소가 발주한 실제 과업지시서 「�
 
 CI 가 추가로 수행하는 것: 커밋 메시지 규칙 검사 · 커버리지 하한선(`webservice/tools/coverage_floor.txt`, 올리기만 가능) · 케이스 ID별 **시험결과서(HTML)** 와 브라우저 E2E 스크린샷을 결과물(Artifacts)로 보관.
 
+## AWS 호스팅
+
+서비스(포트 80)와 시험 시연 페이지(포트 8080)를 EC2 한 대에 Docker 로 운영합니다. 배포 방법·구조·비용 주의사항은 [`deploy/README.md`](deploy/README.md) 를 참고하세요. 시험 시연 페이지는 버튼 한 번으로 서버에서 실제 시험(단위·통합·브라우저 E2E)을 실행하고 케이스별 결과와 E2E 화면 캡처를 실시간으로 보여 줍니다.
+
 ## 시험 관리 엑셀
 
 `webservice/tracker/테스트관리.xlsx` — 케이스 관리(우선순위·화면·비고 직접 편집) + 실행 결과(JUnit XML 파싱) + 대시보드(수식·차트). CI 가 테스트를 실행할 때마다(성공·실패 모두) 자동 갱신하고 main 에 커밋하며, 같은 내용이 GitHub Pages 의 **‘시험 진척도’ 탭**(`assets/tracker/dashboard.html`)에 즉시 반영됩니다. 로컬 갱신: `python webservice/tools/update_tracker.py --run` (엑셀 수정은 항상 최신 main 에서).

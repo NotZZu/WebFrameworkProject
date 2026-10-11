@@ -1,5 +1,5 @@
 """화면(HTML) 라우트: SC-01 로그인/회원가입, SC-02 대시보드."""
-from flask import Blueprint, redirect, render_template, session as http_session, url_for
+from flask import Blueprint, jsonify, redirect, render_template, session as http_session, url_for
 
 from .api.helpers import db
 from .errors import AppError
@@ -26,3 +26,9 @@ def dashboard():
         http_session.clear()
         return redirect(url_for("pages.login_page"))
     return render_template("dashboard.html", user=user)
+
+
+@bp.get("/healthz")
+def healthz():
+    """배포 환경 상태 확인(로드밸런서·모니터링용). 인증 불필요, DB 접근 없음."""
+    return jsonify(status="ok")

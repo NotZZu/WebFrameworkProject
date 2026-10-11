@@ -1,0 +1,80 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: 자동화 검증시스템 - 웹 서비스(80)와 시험 시연 페이지(8080)를 EC2 한 대에 Docker 로 호스팅 (프리티어 우선)
+
+Parameters:
+  InstanceType:
+    Type: String
+    Default: t3.micro
+    AllowedValues: [t2.micro, t3.micro, t3.small]
+    Description: 프리티어 대상 인스턴스(t3.micro 또는 t2.micro). 메모리가 모자라면 t3.small
+  RepoUrl:
+    Type: String
+    Default: https://github.com/NotZZu/WebFrameworkProject.git
+    Description: 배포할 GitHub 저장소 (main 브랜치를 3분마다 확인해 자동 배포)
+  LatestAmiId:
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64
+
+Resources:
+  AppSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: HTTP 80 (service) and 8080 (test demo). SSH is closed; use SSM
+      SecurityGroupIngress:
+        - { IpProtocol: tcp, FromPort: 80, ToPort: 80, CidrIp: 0.0.0.0/0, Description: web service }
+        - { IpProtocol: tcp, FromPort: 8080, ToPort: 8080, CidrIp: 0.0.0.0/0, Description: test demo }
+
+  InstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - { Effect: Allow, Principal: { Service: ec2.amazonaws.com }, Action: "sts:AssumeRole" }
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+
+  InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles: [!Ref InstanceRole]
+
+  ElasticIp:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+
+  AppInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: !Ref LatestAmiId
+      InstanceType: !Ref InstanceType
+      IamInstanceProfile: !Ref InstanceProfile
+      SecurityGroupIds: [!GetAtt AppSecurityGroup.GroupId]
+      MetadataOptions: { HttpTokens: required, HttpEndpoint: enabled }
+      BlockDeviceMappings:
+        - DeviceName: /dev/xvda
+          Ebs: { VolumeSize: 20, VolumeType: gp3, DeleteOnTermination: true }
+      Tags: [{ Key: Name, Value: verification-system }]
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          dnf install -y git
+          git clone --depth 50 ${RepoUrl} /opt/app/repo
+          SERVICE_IP=${ElasticIp} REPO_URL=${RepoUrl} bash /opt/app/repo/deploy/bootstrap.sh
+
+  IpAssociation:
+    Type: AWS::EC2::EIPAssociation
+    Properties:
+      AllocationId: !GetAtt ElasticIp.AllocationId
+      InstanceId: !Ref AppInstance
+
+Outputs:
+  ServiceUrl:
+    Description: 웹 서비스 주소 (배포 완료까지 약 8~15분)
+    Value: !Sub http://${ElasticIp}
+  DemoUrl:
+    Description: 시험 시연 페이지 주소
+    Value: !Sub http://${ElasticIp}:8080
+  InstanceId:
+    Value: !Ref AppInstance
