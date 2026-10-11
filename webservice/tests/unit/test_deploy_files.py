@@ -6,7 +6,7 @@ import pytest
 
 yaml = pytest.importorskip("yaml")
 DEPLOY = pathlib.Path(__file__).resolve().parents[3] / "deploy"
-pytestmark = pytest.mark.skipif(not DEPLOY.exists(), reason="배포 파일 없음(시연 컨테이너에는 deploy/ 가 포함되지 않음)")
+pytestmark = pytest.mark.skipif(not DEPLOY.exists(), reason="배포 파일(deploy/) 없음")
 
 
 class _Loader(yaml.SafeLoader):
@@ -82,3 +82,8 @@ def test_demo_reads_service_url_from_env_file():
     c = load("docker-compose.yml")
     assert c["services"]["demo"]["env_file"] == ["service.env"]
     assert (DEPLOY / "service.env").exists()
+
+
+def test_demo_image_includes_deploy_files():
+    """시연 이미지에 deploy/ 가 들어가야 이 파일의 시험이 시연 화면에서 건너뛰어지지 않는다."""
+    assert "COPY deploy /app/deploy" in (DEPLOY / "Dockerfile.demo").read_text(encoding="utf-8")

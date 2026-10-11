@@ -7,6 +7,8 @@ RUN pip install -r requirements.txt gunicorn playwright \
  && playwright install --with-deps chromium \
  && rm -rf /var/lib/apt/lists/*
 COPY webservice /app/webservice
+# 배포 설정 점검 시험(test_deploy_files)이 읽는 파일 - 시연 화면에서도 건너뛰지 않고 실행되도록 포함
+COPY deploy /app/deploy
 ENV DEMO_RUN_DIR=/tmp/demo-runs
 EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s CMD python -c "import urllib.request;urllib.request.urlopen('http://127.0.0.1:8000/healthz',timeout=3)"
