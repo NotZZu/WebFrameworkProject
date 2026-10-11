@@ -35,7 +35,7 @@ def load_cases() -> list[dict]:
                                capture_output=True, timeout=120)
                 _cases["data"] = json.loads(out.read_text(encoding="utf-8"))
             except Exception:
-                _cases["data"] = []
+                return []          # 실패 결과는 캐시하지 않는다(다음 요청에서 다시 시도)
         return _cases["data"]
 
 

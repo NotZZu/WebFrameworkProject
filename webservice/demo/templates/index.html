@@ -137,6 +137,12 @@ const LEVEL_DESC = {UT: "단위 시험 — 프로그램의 가장 작은 부분(
   ST: "시스템 시험 — 실제 브라우저를 열어 사용자가 하듯 화면을 조작하며 처음부터 끝까지 확인합니다."};
 const KIND_DESC = {positive: "정상 입력을 넣었을 때 올바르게 동작하는지 확인", negative: "잘못된 입력·예외 상황에서 안전하게 거절/처리하는지 확인",
   boundary: "허용 범위의 경계값(최소·최대 등)에서 정확히 동작하는지 확인", security: "공격·권한 없는 접근을 막고 정보를 보호하는지 확인"};
+function actual(e) {
+  if (e.status === "pass") return {cls: "pass", head: "기대 결과와 일치했습니다 (통과)", body: `시험을 실제로 실행한 결과, 위의 기대 결과가 그대로 확인되었습니다.`};
+  if (e.status === "fail") return {cls: "fail", head: "기대와 다른 결과가 나왔습니다 (실패)", body: `실제 결과: ${esc(e.message || "검증 조건이 맞지 않음")}<br>실패가 하나라도 있으면 병합이 차단됩니다.`};
+  if (e.status === "red") return {cls: "red", head: "아직 구현 전입니다 (구현 전 · Red)", body: "TDD 방식에 따라 시험을 먼저 작성해 두었고, 기능이 아직 없어 실패하는 것이 정상입니다. 구현을 마치면 통과로 바뀝니다."};
+  return {cls: "", head: "건너뛰었습니다", body: "이번 실행에서는 조건이 맞지 않아 실행하지 않았습니다."};
+}
 function resultBox(r) {
   if (!r.results.length) return {cls: "", html: runFinished ? `<b>이번 실행에서는 제외된 시험입니다</b><br>이 시험이 포함된 묶음(전체·통합·E2E 등)을 실행하면 결과가 채워집니다.` : `<b>아직 실행 전입니다</b><br>시험을 실행하면 이 칸에 실제 결과가 채워집니다.`};
   const parts = r.results.map(e => {
