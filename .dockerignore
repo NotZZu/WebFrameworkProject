@@ -1,0 +1,10 @@
+.git
+**/__pycache__
+**/*.pyc
+**/.pytest_cache
+webservice/.venv
+webservice/*.db
+webservice/test-artifacts
+webservice/storage
+assets
+docs

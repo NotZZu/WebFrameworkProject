@@ -1,0 +1,17 @@
+# 한 대의 서버에서 서비스(80)와 시험 시연(8080)을 서로 다른 컨테이너로 운영
+services:
+  service:
+    build: { context: .., dockerfile: deploy/Dockerfile.service }
+    restart: unless-stopped
+    ports: ["80:8000"]
+    environment:
+      SECRET_KEY: ${SECRET_KEY}
+      PSEUDONYM_SECRET: ${PSEUDONYM_SECRET}
+    volumes: ["/opt/app-data/service:/data"]
+  demo:
+    build: { context: .., dockerfile: deploy/Dockerfile.demo }
+    restart: unless-stopped
+    ports: ["8080:8000"]
+    environment:
+      SERVICE_URL: ${SERVICE_URL}
+    shm_size: "256m"

@@ -1,0 +1,13 @@
+# 시험 시연 서버 (서비스와 분리). 실제 시험 코드(pytest + Playwright Chromium)를 실행한다. 빌드 컨텍스트: 저장소 루트
+FROM python:3.11-slim
+ENV PYTHONUNBUFFERED=1 PIP_NO_CACHE_DIR=1
+WORKDIR /app/webservice
+COPY webservice/requirements.txt ./
+RUN pip install -r requirements.txt gunicorn playwright \
+ && playwright install --with-deps chromium \
+ && rm -rf /var/lib/apt/lists/*
+COPY webservice /app/webservice
+ENV DEMO_RUN_DIR=/tmp/demo-runs
+EXPOSE 8000
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s CMD python -c "import urllib.request;urllib.request.urlopen('http://127.0.0.1:8000/healthz',timeout=3)"
+CMD ["gunicorn", "-b", "0.0.0.0:8000", "-w", "1", "--threads", "8", "--timeout", "120", "demo.server:app"]

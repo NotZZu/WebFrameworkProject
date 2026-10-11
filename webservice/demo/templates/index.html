@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>시험 시연 — 자동화 검증시스템</title>
+<style>
+:root{--navy:#1e2761;--accent:#3d5afe;--bg:#f4f6fa;--muted:#6b7488;--line:#dfe3ee;--ok:#2e7d32;--okbg:#e6f4ea;--red:#c2185b;--redbg:#fde7ef;--fail:#c62828;--failbg:#fdecea;--skip:#757575}
+*{box-sizing:border-box}
+body{margin:0;font-family:system-ui,-apple-system,"Noto Sans KR","Malgun Gothic",sans-serif;background:var(--bg);color:var(--navy)}
+header{background:linear-gradient(160deg,#1e2761,#141a47);color:#fff;padding:28px 40px}
+header h1{margin:0 0 6px;font-size:26px}header p{margin:0;color:#c9cfee;font-size:14px}
+header nav{margin-top:16px;display:flex;gap:10px;flex-wrap:wrap}
+header nav a{color:#fff;text-decoration:none;border:1px solid #4a56a6;padding:7px 14px;border-radius:8px;font-size:13px}
+header nav a:hover{background:#2b3580}
+main{max-width:1100px;margin:0 auto;padding:24px 20px 60px}
+.card{background:#fff;border-radius:14px;padding:20px 22px;box-shadow:0 2px 10px rgba(30,39,97,.07);margin-bottom:18px}
+h2{margin:0 0 14px;font-size:17px}
+.btns{display:flex;gap:10px;flex-wrap:wrap}
+button.run{background:var(--accent);color:#fff;border:0;border-radius:10px;padding:12px 20px;font-size:15px;font-weight:700;cursor:pointer}
+button.run.sec{background:#fff;color:var(--accent);border:1.5px solid var(--accent)}
+button:disabled{opacity:.45;cursor:not-allowed}
+.hint{color:var(--muted);font-size:13px;margin-top:10px;line-height:1.6}
+.bar{height:14px;background:#eef0f6;border-radius:99px;overflow:hidden;margin:16px 0 10px}
+.bar i{display:block;height:100%;width:0;background:var(--accent);transition:width .3s}
+.kpis{display:grid;grid-template-columns:repeat(5,1fr);gap:12px}
+.kpi{background:var(--bg);border-radius:10px;padding:12px 14px}.kpi span{font-size:12px;color:var(--muted)}.kpi b{display:block;font-size:26px;margin-top:4px}
+.kpi.ok b{color:var(--ok)}.kpi.red b{color:var(--red)}.kpi.fail b{color:var(--fail)}
+#state{font-weight:700}
+table{width:100%;border-collapse:collapse;font-size:13.5px}
+th{text-align:left;color:var(--muted);font-weight:600;padding:8px 6px;border-bottom:1px solid var(--line)}
+td{padding:8px 6px;border-bottom:1px solid #eef0f6;vertical-align:top}
+.badge{display:inline-block;padding:2px 10px;border-radius:99px;font-size:12px;font-weight:700;white-space:nowrap}
+.b-pass{background:var(--okbg);color:var(--ok)}.b-red{background:var(--redbg);color:var(--red)}.b-fail{background:var(--failbg);color:var(--fail)}.b-skip{background:#eee;color:var(--skip)}.b-wait{background:#eef0f6;color:var(--muted)}
+.scroll{max-height:460px;overflow:auto}
+pre{background:#10153a;color:#d7dcff;padding:14px;border-radius:10px;font-size:12px;overflow:auto;max-height:260px;white-space:pre-wrap}
+.shots{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:14px}
+.shots figure{margin:0}.shots img{width:100%;border:1px solid var(--line);border-radius:8px;display:block}.shots figcaption{font-size:12px;color:var(--muted);margin-top:4px}
+.steps{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+.step{background:var(--bg);border-radius:10px;padding:14px;font-size:13px;line-height:1.6}.step b{display:block;color:var(--accent);margin-bottom:4px}
+.ci a{color:var(--accent);text-decoration:none}.ci li{margin:6px 0;font-size:13.5px}
+details summary{cursor:pointer;color:var(--accent);font-size:13px}
+@media(max-width:800px){.kpis{grid-template-columns:repeat(2,1fr)}.steps{grid-template-columns:1fr 1fr}header{padding:22px 18px}}
+</style>
+</head>
+<body>
+<header>
+  <h1>시험 시연 센터</h1>
+  <p>버튼을 누르면 이 서버에서 <b>실제 시험 코드</b>(단위·통합·브라우저 E2E)가 실행되고, 케이스별 결과가 실시간으로 표시됩니다. 서비스 데이터와는 완전히 분리된 시험 전용 환경입니다.</p>
+  <nav>
+    <a id="svc" href="#" target="_blank" rel="noopener">웹 서비스 열기</a>
+    <a href="{{ pages_url }}#tracker" target="_blank" rel="noopener">시험 진척도(GitHub Pages)</a>
+    <a href="{{ repo_url }}/actions" target="_blank" rel="noopener">CI 실행 내역</a>
+    <a href="{{ repo_url }}" target="_blank" rel="noopener">소스 저장소</a>
+  </nav>
+</header>
+<main>
+  <section class="card">
+    <h2>시험 실행</h2>
+    <div class="btns">
+      {% for key, (label, _) in suites.items() %}
+      <button class="run {{ '' if key == 'all' else 'sec' }}" data-suite="{{ key }}">{{ label }} 실행</button>
+      {% endfor %}
+    </div>
+    <div class="hint">· 한 번에 한 건만 실행됩니다(브라우저 E2E 포함 전체 시험은 보통 1~2분).<br>· <b>구현 전(Red)</b>은 아직 구현하지 않아 실패하는 것이 정상인 케이스(TDD)이며, 실패(FAIL)가 0건이어야 병합됩니다.</div>
+    <div class="bar"><i id="pbar"></i></div>
+    <div><span id="state">대기 중</span> <span id="elapsed" style="color:var(--muted);font-size:13px"></span></div>
+    <div class="kpis" style="margin-top:12px">
+      <div class="kpi"><span>진행</span><b id="k-done">0 / 0</b></div>
+      <div class="kpi ok"><span>통과 (Green)</span><b id="k-pass">0</b></div>
+      <div class="kpi red"><span>구현 전 (Red)</span><b id="k-red">0</b></div>
+      <div class="kpi fail"><span>실패 (병합 차단)</span><b id="k-fail">0</b></div>
+      <div class="kpi"><span>건너뜀</span><b id="k-skip">0</b></div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>케이스별 결과 <span id="rowcount" style="color:var(--muted);font-size:13px;font-weight:400"></span></h2>
+    <div class="scroll"><table><thead><tr><th style="width:90px">ID</th><th style="width:70px">구분</th><th>시험 항목</th><th style="width:100px">결과</th><th style="width:70px">시간</th></tr></thead><tbody id="rows"></tbody></table></div>
+  </section>
+
+  <section class="card" id="shot-card" hidden>
+    <h2>브라우저 E2E 화면 캡처</h2>
+    <div class="shots" id="shots"></div>
+  </section>
+
+  <section class="card">
+    <h2>실행 로그</h2>
+    <details><summary>pytest 출력 보기</summary><pre id="log">(아직 실행 전)</pre></details>
+  </section>
+
+  <section class="card">
+    <h2>개발 → 시험 → 병합 흐름 (TDD · CI)</h2>
+    <div class="steps">
+      <div class="step"><b>① Red</b>시험을 먼저 작성. 구현 전이라 실패하는 것이 정상(구현 전 케이스로 표시).</div>
+      <div class="step"><b>② push</b>서브 브랜치로 푸시하면 GitHub Actions 가 자동으로 전체 시험을 실행.</div>
+      <div class="step"><b>③ Green</b>구현하여 시험이 통과. 실패(FAIL)가 하나라도 있으면 병합 차단.</div>
+      <div class="step"><b>④ 병합·배포</b>전부 통과하면 main 자동 병합, 진척도(Excel·Pages)와 서버 갱신.</div>
+    </div>
+  </section>
+
+  <section class="card ci">
+    <h2>최근 CI 실행 (GitHub Actions)</h2>
+    <ul id="ci" style="padding-left:18px;margin:0"><li style="color:var(--muted)">불러오는 중…</li></ul>
+  </section>
+</main>
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const LABEL = {pass: "통과", red: "구현 전", fail: "실패", skip: "건너뜀", wait: "대기"};
+const LEVEL = {UT: "단위", IT: "통합", ST: "시스템"};
+const KIND = {positive: "정상", negative: "비정상", boundary: "경계", security: "보안"};
+let cases = {}, rid = null, timer = null, next = 0;
+$("svc").href = "{{ service_url }}" || `http://${location.hostname}`;
+
+fetch("/api/cases").then(r => r.json()).then(list => { list.forEach(c => cases[c.id] = c); }).catch(() => {});
+
+function addRow(e) {
+  const c = cases[e.case_id] || {};
+  const id = e.case_id || "-";
+  const title = c.title || e.nodeid.split("::").slice(1).join(" › ");
+  const lv = LEVEL[id.slice(0, 2)] || "도구";
+  const tr = document.createElement("tr");
+  tr.innerHTML = `<td><b>${esc(id)}</b></td><td>${lv}</td><td>${esc(title)}${e.message ? `<br><small style="color:var(--fail)">${esc(e.message)}</small>` : ""}</td>` +
+    `<td><span class="badge b-${e.status}">${LABEL[e.status]}</span></td><td>${e.duration}s</td>`;
+  $("rows").appendChild(tr);
+}
+function render(s) {
+  s.results.forEach(addRow);
+  next = s.next;
+  $("rowcount").textContent = `(${s.done}건)`;
+  const total = s.total || 0;
+  $("k-done").textContent = `${s.done} / ${total}`;
+  ["pass", "red", "fail", "skip"].forEach(k => $("k-" + k).textContent = s.counts[k]);
+  $("pbar").style.width = (total ? Math.min(100, s.done / total * 100) : 0) + "%";
+  $("pbar").style.background = s.counts.fail ? "var(--fail)" : "var(--accent)";
+  $("elapsed").textContent = `· ${s.label} · ${s.elapsed}초 경과`;
+  $("log").textContent = s.log || "(출력 대기 중)";
+  if (s.shots.length) {
+    $("shot-card").hidden = false;
+    $("shots").innerHTML = s.shots.map(n => `<figure><a href="/api/run/${s.id}/shots/${n}" target="_blank"><img loading="lazy" src="/api/run/${s.id}/shots/${n}"></a><figcaption>${esc(n.replace(".png", ""))}</figcaption></figure>`).join("");
+  }
+  const st = $("state");
+  if (s.status === "running") { st.textContent = "실행 중…"; st.style.color = "var(--accent)"; }
+  else if (s.status === "done") {
+    const ok = s.counts.fail === 0;
+    st.textContent = ok ? "완료 — 실패 0건, 병합 가능 상태" : `완료 — 실패 ${s.counts.fail}건, 병합 차단`; st.style.color = ok ? "var(--ok)" : "var(--fail)";
+  } else { st.textContent = "실행 오류 (로그 확인)"; st.style.color = "var(--fail)"; }
+}
+async function poll() {
+  try {
+    const s = await (await fetch(`/api/run/${rid}?since=${next}`)).json();
+    render(s);
+    if (s.status !== "running") { clearInterval(timer); setBusy(false); }
+  } catch (e) {}
+}
+function setBusy(b) { document.querySelectorAll("button.run").forEach(x => x.disabled = b); }
+document.querySelectorAll("button.run").forEach(b => b.onclick = async () => {
+  setBusy(true); $("rows").innerHTML = ""; $("shots").innerHTML = ""; $("shot-card").hidden = true; next = 0;
+  const r = await fetch("/api/run", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({suite: b.dataset.suite})});
+  const d = await r.json();
+  if (!r.ok) { $("state").textContent = d.error; $("state").style.color = "var(--fail)"; setBusy(false); return; }
+  rid = d.run_id; $("state").textContent = "시작 중…"; timer = setInterval(poll, 1000); poll();
+});
+
+fetch("https://api.github.com/repos/NotZZu/WebFrameworkProject/actions/runs?per_page=6").then(r => r.json()).then(d => {
+  const rows = (d.workflow_runs || []).filter(w => w.name.startsWith("CI")).slice(0, 5);
+  $("ci").innerHTML = rows.length ? rows.map(w => {
+    const res = w.status !== "completed" ? "진행 중" : (w.conclusion === "success" ? "성공" : "실패");
+    const c = res === "성공" ? "var(--ok)" : res === "진행 중" ? "var(--accent)" : "var(--fail)";
+    return `<li><b style="color:${c}">${res}</b> · <a href="${w.html_url}" target="_blank" rel="noopener">${esc(w.head_branch)}</a> · ${esc((w.head_commit || {}).message || "").split("\n")[0]} <small style="color:var(--muted)">(${new Date(w.created_at).toLocaleString("ko-KR")})</small></li>`;
+  }).join("") : "<li>표시할 실행 내역이 없습니다.</li>";
+}).catch(() => { $("ci").innerHTML = "<li>GitHub 에서 CI 내역을 불러오지 못했습니다.</li>"; });
+</script>
+</body>
+</html>
