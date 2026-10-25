@@ -29,15 +29,28 @@ class LoginThrottle:
         with self._lock:
             return len(self._recent(self._key(username), self.clock())) >= self.max_failures
 
-    def record_failure(self, username) -> None:
+    def try_acquire(self, username) -> bool:
+        """시도 한 번을 '검사 + 기록'을 한 번에 처리한다. 막혀 있으면 False.
+        동시에 들어온 요청도 비밀번호를 확인하기 전에 이 자리를 먼저 차지해야 하므로 한도를 넘길 수 없다(DF-15)."""
         with self._lock:
             now = self.clock()
+            key = self._key(username)
+            if len(self._recent(key, now)) >= self.max_failures:
+                return False
+            self._add(key, now)
+            return True
+
+    def _add(self, key, now) -> None:
+        if len(self._fails) >= self.max_keys:
+            for k in list(self._fails):
+                self._recent(k, now)
             if len(self._fails) >= self.max_keys:
-                for k in list(self._fails):
-                    self._recent(k, now)
-                if len(self._fails) >= self.max_keys:
-                    self._fails.pop(next(iter(self._fails)))
-            self._fails.setdefault(self._key(username), []).append(now)
+                self._fails.pop(next(iter(self._fails)))
+        self._fails.setdefault(key, []).append(now)
+
+    def record_failure(self, username) -> None:
+        with self._lock:
+            self._add(self._key(username), self.clock())
 
     def reset(self, username) -> None:
         with self._lock:

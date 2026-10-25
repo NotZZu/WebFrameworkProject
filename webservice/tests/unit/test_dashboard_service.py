@@ -129,8 +129,9 @@ def test_notification_messages(session, me):
 @case("UT-DASH-11", "FR-03", "get_summary: 알림은 최대 5건", "8건 발생해도 5건만, 위변조 경고가 잘리지 않음", "boundary")
 def test_notifications_capped_at_five(session, me):
     c = factories.make_certificate(session, app_at(session, me, "AES", "approved"), tamper_status="suspected")
-    for i in range(7):
-        app_at(session, me, "RSA", "reviewing", updated_ago=timedelta(hours=i + 1))
+    for i, algo in enumerate(("RSA", "SHA-2", "SHA-3", "HMAC", "ECDSA", "DRBG", "RSA")):
+        # 진행 중인 같은 알고리즘 신청은 한 건뿐이므로 서로 다른 알고리즘 6종 + 이미 종료된 RSA 1건
+        app_at(session, me, algo, "reviewing" if i < 6 else "approved", updated_ago=timedelta(hours=i + 1))
     n = dash.get_summary(session, me.id, NOW)["notifications"]
     assert len(n) == 5 and n[0]["type"] == "warning"
 

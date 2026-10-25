@@ -29,3 +29,13 @@ def make_session_factory(engine):
 def init_db(engine):
     from . import models  # noqa: F401  (테이블 등록)
     Base.metadata.create_all(engine)
+    if engine.dialect.name == "sqlite":
+        # 진행 중(접수/심사중)인 같은 사용자·같은 알고리즘 신청은 DB 가 직접 한 건만 허용한다(DF-13).
+        # 이미 중복 데이터가 있어 만들 수 없으면 건너뛴다(서비스 계층 검사는 그대로 동작).
+        try:
+            with engine.begin() as conn:
+                conn.exec_driver_sql(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS ux_cavp_active_per_user_algo "
+                    "ON cavp_applications (user_id, algorithm_type) WHERE status IN ('submitted','reviewing')")
+        except Exception:  # noqa: BLE001
+            pass

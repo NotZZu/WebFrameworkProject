@@ -71,7 +71,7 @@ def test_concurrent_approve_and_reject(papp):
     s = papp.session_factory()
     person = factories.make_user(s, username="person01")
     factories.make_user(s, username="officer01", user_type="institution")
-    apps = [factories.make_application(s, person, "AES", "reviewing").id for _ in range(5)]
+    apps = [factories.make_application(s, person, algo, "reviewing").id for algo in ("AES", "RSA", "HMAC", "DRBG", "SHA-2")]
     s.close()
     c0 = papp.test_client()
     assert c0.post("/api/auth/login", json={"username": "officer01", "password": PW}).status_code == 200

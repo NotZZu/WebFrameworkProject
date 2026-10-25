@@ -43,3 +43,13 @@ def test_memory_is_bounded():
     for i in range(1000):
         th.record_failure(f"user{i}")
     assert len(th._fails) <= 100
+
+
+@case("UT-ATK-04", "FR-01", "LoginThrottle.try_acquire: 검사와 기록이 한 번에 처리되어 한도(5)를 넘는 시도는 모두 거부",
+      "처음 5번은 True, 이후는 False, 아이디가 달라도 대소문자 무관, reset 후 다시 허용", "security")
+def test_try_acquire_is_atomic_gate():
+    th = LoginThrottle(max_failures=5, window_seconds=900, clock=Clock())
+    assert [th.try_acquire("Victim01") for _ in range(8)] == [True] * 5 + [False] * 3
+    assert th.try_acquire("other001")
+    th.reset("victim01")
+    assert th.try_acquire("VICTIM01")

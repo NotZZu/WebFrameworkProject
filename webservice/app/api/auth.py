@@ -1,7 +1,7 @@
 """인증 API (FR-01): /api/auth/*"""
 from flask import Blueprint, current_app, jsonify, session as http_session
 
-from ..errors import AuthenticationError, TooManyAttemptsError
+from ..errors import TooManyAttemptsError
 from ..services import auth_service
 from .helpers import current_user, db, json_body, user_json
 
@@ -20,13 +20,9 @@ def signup():
 def login():
     b = json_body()
     throttle, name = current_app.login_throttle, b.get("username")
-    if throttle.is_blocked(name):
+    if not throttle.try_acquire(name):  # 비밀번호를 확인하기 전에 자리를 먼저 차지한다(동시 요청 대응)
         raise TooManyAttemptsError("로그인 시도가 너무 많습니다. 잠시 후 다시 시도해 주세요.")
-    try:
-        user = auth_service.login(db(), name, b.get("password"))
-    except AuthenticationError:
-        throttle.record_failure(name)
-        raise
+    user = auth_service.login(db(), name, b.get("password"))
     throttle.reset(name)
     http_session.clear()
     http_session["user_id"] = user.id

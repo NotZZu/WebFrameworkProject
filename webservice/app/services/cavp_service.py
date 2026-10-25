@@ -8,7 +8,8 @@
 - 조회는 본인 신청만. 타인 신청 상세는 PermissionDeniedError (institution 은 전체 조회 가능).
 - 목록: 최신순(submitted_at desc, id desc), page>=1, per_page 1~50, status 필터 선택.
 """
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
+from sqlalchemy.exc import IntegrityError
 
 from ..errors import (DuplicateApplicationError, InvalidTransitionError, NotFoundError,
                       PermissionDeniedError, ValidationError)
@@ -39,7 +40,11 @@ def create_application(session, user_id: int, algorithm_type: str) -> CavpApplic
         raise DuplicateApplicationError("같은 알고리즘의 진행 중인 신청이 있습니다.")
     app = CavpApplication(user_id=user_id, algorithm_type=algorithm_type, status="submitted")
     session.add(app)
-    session.commit()
+    try:
+        session.commit()
+    except IntegrityError:  # 동시에 들어온 같은 신청이 먼저 저장됨 — DB 의 부분 유일 인덱스가 막았다(DF-13)
+        session.rollback()
+        raise DuplicateApplicationError("같은 알고리즘의 진행 중인 신청이 있습니다.")
     return app
 
 
@@ -62,9 +67,15 @@ def update_status(session, actor_id: int, application_id: int, new_status: str) 
         raise ValidationError("상태 값이 올바르지 않습니다.")
     if new_status not in TRANSITIONS[app.status]:
         raise InvalidTransitionError(f"'{STATUS_LABELS[app.status]}' 상태에서는 '{STATUS_LABELS[new_status]}'(으)로 변경할 수 없습니다.")
-    app.status = new_status
-    app.updated_at = utcnow()
+    # 읽은 뒤 다른 요청이 먼저 바꿨을 수 있으므로, '내가 읽은 상태일 때만' 바꾸는 한 번의 UPDATE 로 처리한다(DF-14).
+    changed = session.execute(
+        update(CavpApplication)
+        .where(CavpApplication.id == application_id, CavpApplication.status == app.status)
+        .values(status=new_status, updated_at=utcnow())).rowcount
     session.commit()
+    session.refresh(app)
+    if changed != 1:
+        raise InvalidTransitionError("다른 요청이 먼저 상태를 변경했습니다. 목록을 새로 고친 뒤 다시 시도해 주세요.")
     return app
 
 
