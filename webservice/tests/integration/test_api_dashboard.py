@@ -83,3 +83,31 @@ def test_dashboard_method_not_allowed(login_as):
     c, _ = login_as()
     r = c.post("/api/dashboard", json={})
     assert r.status_code == 405 and r.get_json()["error"]["code"] == "METHOD_NOT_ALLOWED"
+
+
+# ---------------- SC-04 CAVP 시험 신청 화면 ----------------
+@case("IT-41", "FR-03", "GET /cavp/apply 페이지: 접근 제어와 화면 요소", "비로그인 302 → /, 로그인 시 #algorithm/#submit-app/#apply-msg/#my-apps-body/#logout 포함")
+def test_apply_page(client, login_as):
+    r = client.get("/cavp/apply")
+    assert r.status_code == 302 and r.headers["Location"].endswith("/")
+    c, u = login_as()
+    html = c.get("/cavp/apply").get_data(as_text=True)
+    for marker in ("id=\"algorithm\"", "id=\"submit-app\"", "id=\"apply-msg\"", "id=\"my-apps-body\"", "id=\"logout\""):
+        assert marker in html, marker
+    assert u.username in html
+
+
+@case("IT-42", "FR-03", "대시보드의 신청 버튼/메뉴가 신청 화면으로 연결", "#new-app 이 /cavp/apply 로 이동, 사이드 메뉴에 /cavp/apply 링크", "positive")
+def test_dashboard_links_to_apply(login_as):
+    c, _ = login_as()
+    html = c.get("/dashboard").get_data(as_text=True)
+    assert "id=\"new-app\"" in html and "/cavp/apply" in html
+    assert "disabled" not in html.split("id=\"new-app\"")[1].split(">")[0]
+
+
+@case("IT-43", "FR-03", "GET /api/cavp/algorithms: 로그인 필요 + 허용 알고리즘 목록", "비로그인 401, 로그인 시 서비스의 ALGORITHMS 와 동일", "positive")
+def test_algorithms_endpoint(client, login_as):
+    assert client.get("/api/cavp/algorithms").status_code == 401
+    c, _ = login_as()
+    from app.services import cavp_service
+    assert c.get("/api/cavp/algorithms").get_json()["algorithms"] == list(cavp_service.ALGORITHMS)

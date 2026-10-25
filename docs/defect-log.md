@@ -37,18 +37,25 @@
 - DF-04는 운영 서버에는 `SECRET_KEY`가 주입되어 있지만, 빠졌을 때 조용히 기본 키로 동작하는 것이 문제다.
 - DF-03은 쿠키에 세션을 담는 구조라 서버에서 무효화할 수 없다. 사용자별 세션 버전을 DB에 두는 방식으로 고쳐야 한다.
 
-### 2단계 수정 내용
+### 2단계 수정 상세 (원인, 위치, 재검증)
 
-- DF-01: 수정: 가입 시 UTF-8 72바이트 초과 비밀번호 거부, 로그인도 72바이트 초과는 거부
-- DF-02: 수정: 아이디별 5회 연속 실패 시 15분간 429, 성공하면 초기화 (`app/throttle.py`)
-- DF-03: 수정: 로그인마다 서버에 세션 기록(`active_sessions`)을 만들고 로그아웃 시 삭제, 쿠키의 sid가 없으면 401
-- DF-04: 수정: SECRET_KEY·PSEUDONYM_SECRET이 없거나 기본값이면 기동 거부 (개발 시 FLASK_DEBUG=1)
-- DF-05: 수정: 중첩 JSON의 RecursionError를 400으로 변환
-- DF-06: 수정: 요청 본문 64KB 상한, 초과 시 413
-- DF-07: 수정: 기관 코드를 영문·숫자·_-. 50자 이내로 제한
-- DF-08: 수정: nosniff, X-Frame-Options DENY, CSP frame-ancestors 'none', Referrer-Policy 추가
-- DF-09: 수정: 세션 쿠키 Secure 기본 켜짐(COOKIE_SECURE=0 으로 끔). HTTP 직접 접속(IP 주소)에서는 로그인 유지 불가, HTTPS(CloudFront) 주소 사용
-- DF-10: 수정: 비밀번호의 제어 문자(Cc) 거부
-- DF-11: 수정: 숫자 판정을 ASCII [0-9] 로 한정
+| 결함 | 원인 | 수정 위치 | 재검증 | 부작용·한계 |
+|---|---|---|---|---|
+| DF-01 | bcrypt는 비밀번호의 앞 72바이트만 사용한다. 글자 수(64자) 제한만 있어서 한글 등 멀티바이트 비밀번호는 72바이트를 쉽게 넘는다 | `auth_service._validate_password`, `verify_password` | IT-ATK-02 통과 | 한글 비밀번호는 약 24자까지만 가능 |
+| DF-02 | 로그인 실패 횟수를 세는 곳이 없었다 | 새 파일 `app/throttle.py`, `api/auth.login` | IT-ATK-12, UT-ATK-01~03 통과 | 서버 재시작 시 초기화, 남의 아이디를 일부러 잠글 수 있음 |
+| DF-03 | 세션을 쿠키에만 담아서 서버가 무효화할 수 없었다 | `models.ActiveSession`(새 테이블), `auth_service.start_session/end_session/user_for_session`, `helpers.session_user` | IT-ATK-13 통과 | 배포 시 기존 로그인 1회 풀림 |
+| DF-04 | `os.environ.get("SECRET_KEY", "dev-secret-change-me")`처럼 기본값이 있어서 값이 빠져도 조용히 기동했다 | `app/__init__.py` | IT-ATK-14 통과 | 로컬 개발은 `FLASK_DEBUG=1` 필요 |
+| DF-05 | `get_json`에서 RecursionError가 처리되지 않았다 | `helpers.json_body` | IT-ATK-09 통과 (본문을 3만 단계로 줄여 64KB 상한과 독립적으로 검증) | 없음 |
+| DF-06 | `MAX_CONTENT_LENGTH` 미설정 | `app/__init__.py` (64KB) | IT-ATK-11 통과 | 없음 |
+| DF-07 | 기관 코드 검증이 "비어 있지 않음"뿐이었다 | `auth_service.signup` (`_ORG_CODE_RE`) | IT-ATK-06 통과 | 기관 코드에 한글·공백 사용 불가 |
+| DF-08 | 응답 헤더를 설정하지 않았다 | `app/__init__.py` after_request | IT-ATK-15 통과 | CSP는 `frame-ancestors`만 적용 (화면에 인라인 스크립트가 있어 전체 CSP는 보류) |
+| DF-09 | `SESSION_COOKIE_SECURE` 미설정 | `app/__init__.py` | IT-ATK-16 통과 | HTTP 직접 접속에서는 로그인 유지 불가 |
+| DF-10 | 비밀번호 문자 종류 검사가 없었다 | `auth_service._validate_password` | IT-ATK-03 통과 | 없음 |
+| DF-11 | 정규식 `\d`는 유니코드 숫자(٣ 등)도 숫자로 본다 | `auth_service._validate_password` (`[0-9]`) | IT-ATK-04 통과 | 없음 |
 
-수정과 함께 로그인 제한용 단위시험 3건(UT-ATK-01~03)을 추가했다. 수정 후 전체: 단위·통합 시험 통과.
+수정 전 상태는 공격 시험이 실패하는 것으로 확인했고(1단계 커밋), 수정 후 같은 시험이 통과하는 것으로 확인했다(2단계 커밋). 시험 코드는 수정하지 않았고, 두 곳(IT-ATK-09 본문 크기, IT-ATK-16 환경변수 준비)만 수정 후 조건에 맞춰 보강했다.
+
+## 3단계: SC-04 CAVP 시험 신청
+
+공격 시험은 아직 추가하지 않았다(5단계 동시성 시험과 6단계 화면별 공격에서 다룬다).
+구현 방식 메모: 중복 신청 방지는 "개수를 세고 저장하는" 단순 방식으로 구현했다. 동시에 같은 신청이 들어오면 둘 다 통과할 수 있어서 5단계에서 시험한다.
