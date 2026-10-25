@@ -19,7 +19,7 @@ main{padding:32px 40px;max-width:1100px}
 header{display:flex;justify-content:space-between;align-items:center;margin-bottom:24px}
 h1{margin:0;font-size:24px}.sub{color:var(--muted);font-size:14px;margin-top:4px}
 button{font-family:inherit;cursor:pointer}
-.btn{background:var(--accent);color:#fff;border:0;border-radius:10px;padding:11px 18px;font-size:14px;font-weight:700;opacity:.5;cursor:not-allowed}
+.btn{display:inline-block;background:var(--accent);color:#fff;border:0;border-radius:10px;padding:11px 18px;font-size:14px;font-weight:700;text-decoration:none;cursor:pointer}
 .logout{background:none;border:1px solid var(--line);color:var(--navy);border-radius:8px;padding:8px 14px;font-size:13px;margin-left:10px}
 .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:24px}
 .kpi{background:#fff;border-radius:14px;padding:20px;box-shadow:0 2px 10px rgba(30,39,97,.06)}
@@ -48,7 +48,7 @@ td{padding:11px 6px;border-bottom:1px solid #eef0f6}
   <nav>
     <a class="on" href="/dashboard">대시보드</a>
     <a class="soon" title="준비 중">가명·익명정보 처리</a>
-    <a class="soon" title="준비 중">CAVP 시험 신청</a>
+    <a href="/cavp/apply">CAVP 시험 신청</a>
     <a class="soon" title="준비 중">검증서 이력 조회</a>
     <a class="soon" title="준비 중">위변조 탐지 결과</a>
   </nav>
@@ -60,7 +60,7 @@ td{padding:11px 6px;border-bottom:1px solid #eef0f6}
       <h1 id="welcome">안녕하세요, {{ user.username }}님</h1>
       <div class="sub" id="scope-note">오늘의 시험 현황을 확인하세요.</div>
     </div>
-    <div><button class="btn" id="new-app" disabled title="준비 중">+ CAVP 시험 신청</button><button class="logout" id="logout">로그아웃</button></div>
+    <div><a class="btn" id="new-app" href="/cavp/apply">+ CAVP 시험 신청</a><button class="logout" id="logout">로그아웃</button></div>
   </header>
   <section class="kpis">
     <div class="kpi"><span>진행중 시험</span><strong id="kpi-in-progress">–</strong></div>
