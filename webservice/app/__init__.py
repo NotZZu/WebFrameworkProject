@@ -4,21 +4,35 @@ import os
 from flask import Flask
 
 from .db import init_db, make_engine, make_session_factory
+from .throttle import LoginThrottle
+
+_DEV_SECRET = "dev-secret-change-me"
+_DEV_PSEUDONYM_SECRET = "dev-pseudonym-secret"
 
 
 def create_app(config: dict | None = None) -> Flask:
     app = Flask(__name__)
     app.config.update(
         DATABASE_URL=os.environ.get("DATABASE_URL", "sqlite:///app.db"),
-        SECRET_KEY=os.environ.get("SECRET_KEY", "dev-secret-change-me"),
-        PSEUDONYM_SECRET=os.environ.get("PSEUDONYM_SECRET", "dev-pseudonym-secret"),
+        SECRET_KEY=os.environ.get("SECRET_KEY", _DEV_SECRET),
+        PSEUDONYM_SECRET=os.environ.get("PSEUDONYM_SECRET", _DEV_PSEUDONYM_SECRET),
         CERT_STORAGE_DIR=os.environ.get("CERT_STORAGE_DIR", "storage/certs"),
         TESTING=False,
+        MAX_CONTENT_LENGTH=64 * 1024,  # 요청 본문 상한(DF-06)
         SESSION_COOKIE_HTTPONLY=True,
         SESSION_COOKIE_SAMESITE="Lax",
+        # 기본은 HTTPS 에서만 쿠키 전송(DF-09). 로컬 개발은 COOKIE_SECURE=0 으로 끈다.
+        SESSION_COOKIE_SECURE=os.environ.get("COOKIE_SECURE", "1") != "0",
     )
     if config:
         app.config.update(config)
+    if app.config["SESSION_COOKIE_SECURE"] and app.config["TESTING"]:
+        app.config["SESSION_COOKIE_SECURE"] = bool((config or {}).get("SESSION_COOKIE_SECURE", False))
+    if not app.config["TESTING"] and os.environ.get("FLASK_DEBUG") != "1":
+        for key, dev_value in (("SECRET_KEY", _DEV_SECRET), ("PSEUDONYM_SECRET", _DEV_PSEUDONYM_SECRET)):
+            if app.config[key] in ("", dev_value):  # 개발용 기본 키로는 기동하지 않는다(DF-04)
+                raise RuntimeError(f"{key} 환경변수를 설정해야 합니다.")
+    app.login_throttle = LoginThrottle()
     app.engine = make_engine(app.config["DATABASE_URL"])
     app.session_factory = make_session_factory(app.engine)
     init_db(app.engine)
@@ -32,4 +46,12 @@ def create_app(config: dict | None = None) -> Flask:
     app.register_blueprint(dashboard_api.bp)
     app.register_blueprint(pages.bp)
     register_error_handlers(app)
+
+    @app.after_request
+    def _security_headers(resp):
+        resp.headers.setdefault("X-Content-Type-Options", "nosniff")
+        resp.headers.setdefault("X-Frame-Options", "DENY")
+        resp.headers.setdefault("Content-Security-Policy", "frame-ancestors 'none'")
+        resp.headers.setdefault("Referrer-Policy", "same-origin")
+        return resp
     return app

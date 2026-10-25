@@ -125,9 +125,9 @@ def test_type_confusion_never_500(prod_client, field, value):
 
 # ───────── 요청 형식·크기 공격 ─────────
 
-@case("IT-ATK-09", "FR-01", "깊게 중첩된 JSON 본문(10만 단계)", "서버 오류(500) 없이 400", "negative")
+@case("IT-ATK-09", "FR-01", "깊게 중첩된 JSON 본문(3만 단계, 크기 제한 이내)", "서버 오류(500) 없이 400", "negative")
 def test_deeply_nested_json(prod_client):
-    r = prod_client.post("/api/auth/login", data="[" * 100_000, content_type="application/json")
+    r = prod_client.post("/api/auth/login", data="[" * 30_000, content_type="application/json")
     assert r.status_code == 400
 
 
@@ -198,6 +198,7 @@ def test_security_headers(client):
 @case("IT-ATK-16", "FR-01", "세션 쿠키 속성: HttpOnly·SameSite·Secure", "운영 설정에서 세 속성이 모두 켜짐", "security")
 def test_session_cookie_flags(tmp_path, monkeypatch):
     monkeypatch.setenv("SECRET_KEY", "x" * 32)
+    monkeypatch.setenv("PSEUDONYM_SECRET", "y" * 32)
     a = create_app({"DATABASE_URL": "sqlite://", "CERT_STORAGE_DIR": str(tmp_path)})
     assert a.config["SESSION_COOKIE_HTTPONLY"] is True
     assert a.config["SESSION_COOKIE_SAMESITE"] in ("Lax", "Strict")
