@@ -39,3 +39,8 @@ class DuplicateApplicationError(AppError):
 class InvalidTransitionError(AppError):
     http_status = 409
     code = "INVALID_TRANSITION"
+
+
+class TooManyAttemptsError(AppError):
+    http_status = 429
+    code = "TOO_MANY_ATTEMPTS"

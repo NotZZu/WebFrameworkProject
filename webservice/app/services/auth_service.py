@@ -7,17 +7,19 @@
 - 로그인 실패 시 '아이디 없음'과 '비밀번호 불일치'를 구분하지 않는다.
 """
 import re
+import unicodedata
 
 import bcrypt
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
 from ..errors import AuthenticationError, DuplicateUsernameError, NotFoundError, ValidationError
-from ..models import User
+from ..models import ActiveSession, User
 
 USER_TYPES = ("individual", "company", "institution")
 _USERNAME_RE = re.compile(r"[A-Za-z0-9_]{4,20}")
-_BCRYPT_MAX = 72  # bcrypt 는 72바이트 초과 입력을 처리하지 못하므로 잘라서 사용
+_BCRYPT_MAX = 72  # bcrypt 는 72바이트 초과 입력을 무시하므로, 가입 단계에서 그 길이를 넘는 비밀번호를 거부한다(DF-01)
+_ORG_CODE_RE = re.compile(r"[A-Za-z0-9_\-.]{1,50}")
 LOGIN_FAILED_MESSAGE = "아이디 또는 비밀번호가 올바르지 않습니다."
 _DUMMY_HASH = bcrypt.hashpw(b"dummy-password-0", bcrypt.gensalt(rounds=4)).decode()
 
@@ -33,6 +35,8 @@ def hash_password(plain: str) -> str:
 def verify_password(plain, hashed) -> bool:
     if not isinstance(plain, str) or not plain or not isinstance(hashed, str) or not hashed:
         return False
+    if len(plain.encode("utf-8")) > _BCRYPT_MAX:
+        return False  # 앞부분만 같은 다른 비밀번호가 통과하지 못하게 한다
     try:
         return bcrypt.checkpw(_pw_bytes(plain), hashed.encode())
     except (ValueError, TypeError):
@@ -47,8 +51,12 @@ def _validate_username(username) -> str:
 
 def _validate_password(password) -> str:
     if (not isinstance(password, str) or not 8 <= len(password) <= 64
-            or not re.search(r"[A-Za-z]", password) or not re.search(r"\d", password)):
+            or not re.search(r"[A-Za-z]", password) or not re.search(r"[0-9]", password)):
         raise ValidationError("비밀번호는 8~64자이며 영문과 숫자를 각각 1자 이상 포함해야 합니다.")
+    if any(unicodedata.category(ch) == "Cc" for ch in password):
+        raise ValidationError("비밀번호에 제어 문자를 사용할 수 없습니다.")
+    if len(password.encode("utf-8")) > _BCRYPT_MAX:
+        raise ValidationError("비밀번호는 UTF-8 기준 72바이트 이내여야 합니다(한글은 한 글자가 3바이트).")
     return password
 
 
@@ -63,6 +71,8 @@ def signup(session, username, password, user_type, org_code=None) -> User:
         org_code = org_code.strip() if isinstance(org_code, str) else ""
         if not org_code:
             raise ValidationError("기업/기관 사용자는 기관 코드가 필요합니다.")
+        if not _ORG_CODE_RE.fullmatch(org_code):
+            raise ValidationError("기관 코드는 50자 이내의 영문, 숫자, 밑줄(_), 하이픈(-), 점(.)만 사용할 수 있습니다.")
     if session.scalar(select(User).where(User.username == username)):
         raise DuplicateUsernameError("이미 사용 중인 아이디입니다.")
     user = User(username=username, password_hash=hash_password(password),
@@ -92,3 +102,30 @@ def get_user(session, user_id) -> User:
     if user is None:
         raise NotFoundError("사용자를 찾을 수 없습니다.")
     return user
+
+
+def start_session(session, user_id) -> str:
+    """로그인 성공 시 서버 쪽 세션 기록을 만들고 쿠키에 넣을 식별자를 돌려준다(DF-03)."""
+    import secrets
+    sid = secrets.token_urlsafe(32)
+    session.add(ActiveSession(sid=sid, user_id=user_id))
+    session.commit()
+    return sid
+
+
+def end_session(session, sid) -> None:
+    if isinstance(sid, str):
+        row = session.get(ActiveSession, sid)
+        if row:
+            session.delete(row)
+            session.commit()
+
+
+def user_for_session(session, user_id, sid):
+    """쿠키의 (user_id, sid)가 서버에 남아 있는 세션과 일치할 때만 사용자를 돌려준다."""
+    if not isinstance(sid, str):
+        return None
+    row = session.get(ActiveSession, sid)
+    if row is None or row.user_id != user_id:
+        return None
+    return session.get(User, user_id)

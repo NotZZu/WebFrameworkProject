@@ -13,21 +13,31 @@ def db():
 
 
 def json_body() -> dict:
-    data = request.get_json(silent=True)
+    try:
+        data = request.get_json(silent=True)
+    except RecursionError:  # 매우 깊게 중첩된 JSON(DF-05)
+        data = None
     if not isinstance(data, dict):
         raise ValidationError("요청 본문은 JSON 객체여야 합니다.")
     return data
 
 
-def current_user():
+def session_user():
+    """쿠키의 세션이 서버에 남아 있을 때만 사용자를 돌려준다. 아니면 쿠키를 비우고 None."""
     uid = http_session.get("user_id")
     if uid is None:
-        raise AuthenticationError("로그인이 필요합니다.")
-    try:
-        return auth_service.get_user(db(), uid)
-    except AppError:
+        return None
+    user = auth_service.user_for_session(db(), uid, http_session.get("sid"))
+    if user is None:
         http_session.clear()
+    return user
+
+
+def current_user():
+    user = session_user()
+    if user is None:
         raise AuthenticationError("로그인이 필요합니다.")
+    return user
 
 
 def user_json(u) -> dict:
@@ -45,7 +55,7 @@ def register_error_handlers(app):
 
     @app.errorhandler(HTTPException)
     def _http_error(e):
-        codes = {400: "VALIDATION_ERROR", 404: "NOT_FOUND", 405: "METHOD_NOT_ALLOWED"}
+        codes = {400: "VALIDATION_ERROR", 404: "NOT_FOUND", 405: "METHOD_NOT_ALLOWED", 413: "PAYLOAD_TOO_LARGE"}
         if request.path.startswith("/api/"):
             return error_response(e.code, codes.get(e.code, "HTTP_ERROR"), e.description or e.name)
         return e

@@ -35,6 +35,14 @@ class PersonalInfo(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
 
+class ActiveSession(Base):
+    """로그인 중인 세션. 로그아웃하면 행이 지워져 훔친 쿠키도 즉시 무효가 된다(DF-03)."""
+    __tablename__ = "active_sessions"
+    sid: Mapped[str] = mapped_column(String(64), primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
 class CavpApplication(Base):
     __tablename__ = "cavp_applications"
     id: Mapped[int] = mapped_column(primary_key=True)
