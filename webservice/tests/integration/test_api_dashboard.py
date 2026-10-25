@@ -111,3 +111,26 @@ def test_algorithms_endpoint(client, login_as):
     c, _ = login_as()
     from app.services import cavp_service
     assert c.get("/api/cavp/algorithms").get_json()["algorithms"] == list(cavp_service.ALGORITHMS)
+
+
+# ---------------- SC-05 CAVP 진행상태 조회 화면 ----------------
+@case("IT-44", "FR-03", "GET /cavp/status 페이지: 접근 제어와 화면 요소", "비로그인 302 → /, 로그인 시 #status-filter/#apps-body/#detail/#page-info/#logout 포함, 사이드 메뉴 연결")
+def test_status_page(client, login_as):
+    r = client.get("/cavp/status")
+    assert r.status_code == 302 and r.headers["Location"].endswith("/")
+    c, u = login_as()
+    html = c.get("/cavp/status").get_data(as_text=True)
+    for marker in ("id=\"status-filter\"", "id=\"apps-body\"", "id=\"detail\"", "id=\"page-info\"", "id=\"logout\""):
+        assert marker in html, marker
+    assert "/cavp/status" in c.get("/dashboard").get_data(as_text=True)
+    assert "/cavp/status" in c.get("/cavp/apply").get_data(as_text=True)
+
+
+@case("IT-45", "FR-03", "기관 사용자의 신청 목록은 전체 범위, 일반 사용자는 본인 범위", "기관: scope=all 이고 타인 신청에 owner 표시, 일반: scope=own", "security")
+def test_list_scope_by_user_type(login_as, db):
+    person, up = login_as(username="person01")
+    officer, _ = login_as("institution", "officer01")
+    factories.make_application(db, up, "AES")
+    assert person.get("/api/cavp/applications").get_json()["scope"] == "own"
+    body = officer.get("/api/cavp/applications").get_json()
+    assert body["scope"] == "all" and body["total"] == 1 and body["items"][0]["owner"] == "person01"

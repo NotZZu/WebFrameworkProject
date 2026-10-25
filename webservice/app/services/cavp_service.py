@@ -10,8 +10,9 @@
 """
 from sqlalchemy import func, select
 
-from ..errors import DuplicateApplicationError, NotFoundError, ValidationError
-from ..models import CavpApplication, User
+from ..errors import (DuplicateApplicationError, InvalidTransitionError, NotFoundError,
+                      PermissionDeniedError, ValidationError)
+from ..models import CavpApplication, User, utcnow
 from .dashboard_service import STATUS_LABELS
 
 ALGORITHMS = ("AES", "SHA-2", "SHA-3", "HMAC", "RSA", "ECDSA", "DRBG")
@@ -49,17 +50,32 @@ def _int_in_range(value, name, low, high):
 
 
 def update_status(session, actor_id: int, application_id: int, new_status: str) -> CavpApplication:
-    raise NotImplementedError
+    actor = session.get(User, actor_id)
+    if actor is None:
+        raise NotFoundError("사용자를 찾을 수 없습니다.")
+    if actor.user_type != "institution":
+        raise PermissionDeniedError("신청 상태는 기관 사용자만 변경할 수 있습니다.")
+    app = session.get(CavpApplication, application_id)
+    if app is None:
+        raise NotFoundError("신청을 찾을 수 없습니다.")
+    if not isinstance(new_status, str) or new_status not in STATUSES:
+        raise ValidationError("상태 값이 올바르지 않습니다.")
+    if new_status not in TRANSITIONS[app.status]:
+        raise InvalidTransitionError(f"'{STATUS_LABELS[app.status]}' 상태에서는 '{STATUS_LABELS[new_status]}'(으)로 변경할 수 없습니다.")
+    app.status = new_status
+    app.updated_at = utcnow()
+    session.commit()
+    return app
 
 
 def list_applications(session, user_id: int, status: str | None = None,
-                      page: int = 1, per_page: int = 10) -> dict:
+                      page: int = 1, per_page: int = 10, include_all: bool = False) -> dict:
     """{'items': [CavpApplication], 'total': int, 'page': int, 'per_page': int}"""
     _int_in_range(page, "page", 1, 1_000_000)
     _int_in_range(per_page, "per_page", 1, 50)
     if status is not None and status not in STATUSES:
         raise ValidationError("상태 값이 올바르지 않습니다.")
-    cond = [CavpApplication.user_id == user_id]
+    cond = [] if include_all else [CavpApplication.user_id == user_id]
     if status is not None:
         cond.append(CavpApplication.status == status)
     total = session.scalar(select(func.count()).select_from(CavpApplication).where(*cond))
@@ -71,4 +87,12 @@ def list_applications(session, user_id: int, status: str | None = None,
 
 
 def get_application(session, user_id: int, application_id: int) -> CavpApplication:
-    raise NotImplementedError
+    user = session.get(User, user_id)
+    if user is None:
+        raise NotFoundError("사용자를 찾을 수 없습니다.")
+    app = session.get(CavpApplication, application_id)
+    if app is None:
+        raise NotFoundError("신청을 찾을 수 없습니다.")
+    if app.user_id != user_id and user.user_type != "institution":
+        raise PermissionDeniedError("다른 사용자의 신청은 조회할 수 없습니다.")
+    return app
