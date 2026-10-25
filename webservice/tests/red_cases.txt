@@ -93,3 +93,15 @@ UT-SEED-04
 UT-SEED-05
 UT-SEED-06
 IT-17
+# 공격 시험에서 발견된 결함 (docs/defect-log.md 의 DF 번호와 연결). 수정하면 해당 줄을 지운다.
+IT-ATK-02
+IT-ATK-03
+IT-ATK-04
+IT-ATK-06
+IT-ATK-09
+IT-ATK-11
+IT-ATK-12
+IT-ATK-13
+IT-ATK-14
+IT-ATK-15
+IT-ATK-16
