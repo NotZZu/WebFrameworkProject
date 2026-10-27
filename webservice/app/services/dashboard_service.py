@@ -20,10 +20,9 @@ status_label: submitted→'접수 대기', reviewing→'시험 진행중', appro
 """
 from datetime import datetime, timedelta
 
-from sqlalchemy import select
-
 from ..errors import NotFoundError
-from ..models import CavpApplication, Certificate, PersonalInfo, User, utcnow
+from ..models import utcnow
+from ..store import as_store
 
 STATUS_LABELS = {"submitted": "접수 대기", "reviewing": "시험 진행중", "approved": "시험 완료", "rejected": "반려"}
 _INFO_MESSAGES = {
@@ -34,20 +33,16 @@ _INFO_MESSAGES = {
 
 
 def get_summary(session, user_id: int, now: datetime | None = None) -> dict:
+    store = as_store(session)
     now = now or utcnow()
-    user = session.get(User, user_id)
+    user = store.get_user(user_id)
     if user is None:
         raise NotFoundError("사용자를 찾을 수 없습니다.")
 
     scope = "all" if user.user_type == "institution" else "own"
-    app_q = select(CavpApplication)
-    cert_q = select(Certificate)
-    if scope == "own":
-        app_q = app_q.where(CavpApplication.user_id == user.id)
-        cert_q = cert_q.join(CavpApplication, Certificate.application_id == CavpApplication.id) \
-            .where(CavpApplication.user_id == user.id)
-    apps = list(session.scalars(app_q))
-    certs = list(session.scalars(cert_q))
+    owner = user.id if scope == "own" else None
+    apps = store.all_applications(owner)
+    certs = store.list_certificates(owner)
 
     by_status = {k: 0 for k in STATUS_LABELS}
     for a in apps:
@@ -63,7 +58,7 @@ def get_summary(session, user_id: int, now: datetime | None = None) -> dict:
         if a.status in _INFO_MESSAGES:
             notifications.append({"type": "info", "message": _INFO_MESSAGES[a.status].format(algo=a.algorithm_type)})
 
-    info = session.scalar(select(PersonalInfo).where(PersonalInfo.user_id == user.id))
+    info = store.get_personal_info(user.id)
     return {
         "scope": scope,
         "user": {"username": user.username, "user_type": user.user_type},

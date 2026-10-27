@@ -1,9 +1,7 @@
 """CAVP 시험 신청 API (FR-03): /api/cavp/applications"""
 from flask import Blueprint, jsonify, request
-from sqlalchemy import select
 
 from ..errors import ValidationError
-from ..models import User
 from ..services import cavp_service
 from ..services.dashboard_service import STATUS_LABELS
 from .helpers import current_user, db, json_body
@@ -29,10 +27,8 @@ def _int_param(name, default):
 
 
 def _owners(apps) -> dict:
-    ids = {a.user_id for a in apps}
-    if not ids:
-        return {}
-    return {u.id: u.username for u in db().scalars(select(User).where(User.id.in_(ids)))}
+    users = db().get_users_by_ids({a.user_id for a in apps})
+    return {uid: u.username for uid, u in users.items()}
 
 
 @bp.get("/algorithms")

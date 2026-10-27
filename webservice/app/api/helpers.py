@@ -7,8 +7,9 @@ from ..services import auth_service
 
 
 def db():
+    """요청마다 하나의 저장소(Store)를 만들어 돌려준다."""
     if "db" not in g:
-        g.db = current_app.session_factory()
+        g.db = current_app.store_factory()
     return g.db
 
 

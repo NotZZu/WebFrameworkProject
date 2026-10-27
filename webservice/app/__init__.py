@@ -4,6 +4,7 @@ import os
 from flask import Flask
 
 from .db import init_db, make_engine, make_session_factory
+from .store import SqlStore
 from .throttle import LoginThrottle
 
 _DEV_SECRET = "dev-secret-change-me"
@@ -36,6 +37,7 @@ def create_app(config: dict | None = None) -> Flask:
     app.engine = make_engine(app.config["DATABASE_URL"])
     app.session_factory = make_session_factory(app.engine)
     init_db(app.engine)
+    app.store_factory = lambda: SqlStore(app.session_factory())
 
     from .api import auth as auth_api
     from .api import cavp as cavp_api

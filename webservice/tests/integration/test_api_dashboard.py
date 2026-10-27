@@ -28,8 +28,8 @@ def test_dashboard_requires_login(client):
 def test_dashboard_isolation(login_as, db):
     ca, ua = login_as()
     cb, ub = login_as()
-    for _ in range(3):
-        factories.make_application(db, ua, "AES", "submitted")
+    for algo in ("AES", "SHA-2", "HMAC"):  # 진행 중인 같은 알고리즘 신청은 DB 규칙상 한 건뿐이므로 서로 다른 알고리즘 사용
+        factories.make_application(db, ua, algo, "submitted")
     factories.make_application(db, ub, "RSA", "submitted")
     assert ca.get("/api/dashboard").get_json()["applications"]["total"] == 3
     assert cb.get("/api/dashboard").get_json()["applications"]["total"] == 1
