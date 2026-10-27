@@ -10,11 +10,8 @@ import re
 import unicodedata
 
 import bcrypt
-from sqlalchemy import select
-from sqlalchemy.exc import IntegrityError
-
 from ..errors import AuthenticationError, DuplicateUsernameError, NotFoundError, ValidationError
-from ..models import ActiveSession, User
+from ..store import as_store
 
 USER_TYPES = ("individual", "company", "institution")
 _USERNAME_RE = re.compile(r"[A-Za-z0-9_]{4,20}")
@@ -60,7 +57,8 @@ def _validate_password(password) -> str:
     return password
 
 
-def signup(session, username, password, user_type, org_code=None) -> User:
+def signup(session, username, password, user_type, org_code=None):
+    store = as_store(session)
     _validate_username(username)
     _validate_password(password)
     if user_type not in USER_TYPES:
@@ -73,23 +71,16 @@ def signup(session, username, password, user_type, org_code=None) -> User:
             raise ValidationError("기업/기관 사용자는 기관 코드가 필요합니다.")
         if not _ORG_CODE_RE.fullmatch(org_code):
             raise ValidationError("기관 코드는 50자 이내의 영문, 숫자, 밑줄(_), 하이픈(-), 점(.)만 사용할 수 있습니다.")
-    if session.scalar(select(User).where(User.username == username)):
+    if store.get_user_by_username(username):
         raise DuplicateUsernameError("이미 사용 중인 아이디입니다.")
-    user = User(username=username, password_hash=hash_password(password),
-                user_type=user_type, org_code=org_code)
-    session.add(user)
-    try:
-        session.commit()
-    except IntegrityError:
-        session.rollback()
-        raise DuplicateUsernameError("이미 사용 중인 아이디입니다.")
-    return user
+    return store.add_user(username, hash_password(password), user_type, org_code)
 
 
-def login(session, username, password) -> User:
+def login(session, username, password):
+    store = as_store(session)
     user = None
     if isinstance(username, str) and username:
-        user = session.scalar(select(User).where(User.username == username))
+        user = store.get_user_by_username(username)
     # 계정 존재 여부와 무관하게 해시 비교를 수행(응답 시간 차이 최소화)
     ok = verify_password(password, user.password_hash if user else _DUMMY_HASH)
     if not user or not ok:
@@ -97,8 +88,8 @@ def login(session, username, password) -> User:
     return user
 
 
-def get_user(session, user_id) -> User:
-    user = session.get(User, user_id)
+def get_user(session, user_id):
+    user = as_store(session).get_user(user_id)
     if user is None:
         raise NotFoundError("사용자를 찾을 수 없습니다.")
     return user
@@ -108,24 +99,21 @@ def start_session(session, user_id) -> str:
     """로그인 성공 시 서버 쪽 세션 기록을 만들고 쿠키에 넣을 식별자를 돌려준다(DF-03)."""
     import secrets
     sid = secrets.token_urlsafe(32)
-    session.add(ActiveSession(sid=sid, user_id=user_id))
-    session.commit()
+    as_store(session).add_session(sid, user_id)
     return sid
 
 
 def end_session(session, sid) -> None:
     if isinstance(sid, str):
-        row = session.get(ActiveSession, sid)
-        if row:
-            session.delete(row)
-            session.commit()
+        as_store(session).delete_session(sid)
 
 
 def user_for_session(session, user_id, sid):
     """쿠키의 (user_id, sid)가 서버에 남아 있는 세션과 일치할 때만 사용자를 돌려준다."""
     if not isinstance(sid, str):
         return None
-    row = session.get(ActiveSession, sid)
+    store = as_store(session)
+    row = store.get_session(sid)
     if row is None or row.user_id != user_id:
         return None
-    return session.get(User, user_id)
+    return store.get_user(user_id)
