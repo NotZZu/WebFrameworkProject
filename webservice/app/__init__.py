@@ -11,9 +11,32 @@ _DEV_SECRET = "dev-secret-change-me"
 _DEV_PSEUDONYM_SECRET = "dev-pseudonym-secret"
 
 
+def _setup_dynamodb(app: Flask) -> None:
+    """서버리스 배포: 데이터와 로그인 시도 횟수를 DynamoDB 한 테이블에 둔다. boto3 는 이때만 불러온다."""
+    import threading
+
+    import boto3
+
+    from .store.dynamo import DynamoStore, DynamoThrottle
+
+    name = app.config["DYNAMODB_TABLE"]
+    if not name:
+        raise RuntimeError("DYNAMODB_TABLE 환경변수를 설정해야 합니다.")
+    local = threading.local()  # boto3 리소스는 스레드 간 공유할 수 없으므로 스레드마다 하나씩 쓴다
+
+    def table():
+        if not hasattr(local, "table"):
+            local.table = boto3.resource("dynamodb").Table(name)
+        return local.table
+    app.store_factory = lambda: DynamoStore(table())
+    app.login_throttle = DynamoThrottle(table)
+
+
 def create_app(config: dict | None = None) -> Flask:
     app = Flask(__name__)
     app.config.update(
+        STORE_BACKEND=os.environ.get("STORE_BACKEND", "sql"),   # sql | dynamodb
+        DYNAMODB_TABLE=os.environ.get("DYNAMODB_TABLE", ""),
         DATABASE_URL=os.environ.get("DATABASE_URL", "sqlite:///app.db"),
         SECRET_KEY=os.environ.get("SECRET_KEY", _DEV_SECRET),
         PSEUDONYM_SECRET=os.environ.get("PSEUDONYM_SECRET", _DEV_PSEUDONYM_SECRET),
@@ -33,11 +56,16 @@ def create_app(config: dict | None = None) -> Flask:
         for key, dev_value in (("SECRET_KEY", _DEV_SECRET), ("PSEUDONYM_SECRET", _DEV_PSEUDONYM_SECRET)):
             if app.config[key] in ("", dev_value):  # 개발용 기본 키로는 기동하지 않는다(DF-04)
                 raise RuntimeError(f"{key} 환경변수를 설정해야 합니다.")
-    app.login_throttle = LoginThrottle()
-    app.engine = make_engine(app.config["DATABASE_URL"])
-    app.session_factory = make_session_factory(app.engine)
-    init_db(app.engine)
-    app.store_factory = lambda: SqlStore(app.session_factory())
+    if app.config["STORE_BACKEND"] == "dynamodb":
+        _setup_dynamodb(app)
+    elif app.config["STORE_BACKEND"] == "sql":
+        app.login_throttle = LoginThrottle()
+        app.engine = make_engine(app.config["DATABASE_URL"])
+        app.session_factory = make_session_factory(app.engine)
+        init_db(app.engine)
+        app.store_factory = lambda: SqlStore(app.session_factory())
+    else:
+        raise RuntimeError("STORE_BACKEND 는 sql 또는 dynamodb 여야 합니다.")
 
     from .api import auth as auth_api
     from .api import cavp as cavp_api
