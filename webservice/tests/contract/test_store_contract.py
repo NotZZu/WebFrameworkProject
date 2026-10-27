@@ -186,3 +186,55 @@ def test_검증서와_가명정보가_없으면_빈_결과(store):
     u = _user(store)
     assert store.list_certificates(u.id) == [] and store.list_certificates(None) == []
     assert store.get_personal_info(u.id) is None
+
+
+# ---- 가명·익명 처리 결과 ----
+def test_가명정보_저장_후_조회된다(store):
+    u = _user(store)
+    assert store.get_personal_info(u.id) is None
+    p = store.upsert_personal_info(u.id, "pseudonym", "PSN-aaaaaaaaaaaaaaaa", "홍*동 (30대)")
+    got = store.get_personal_info(u.id)
+    assert (got.user_id, got.anonymization_level, got.pseudonym_id, got.masked_display_value) == \
+        (u.id, "pseudonym", "PSN-aaaaaaaaaaaaaaaa", "홍*동 (30대)") == \
+        (p.user_id, p.anonymization_level, p.pseudonym_id, p.masked_display_value)
+
+
+def test_다시_처리해도_기존_가명ID가_유지된다(store):
+    u = _user(store)
+    store.upsert_personal_info(u.id, "pseudonym", "PSN-1111111111111111", "홍*동 (30대)")
+    again = store.upsert_personal_info(u.id, "pseudonym", "PSN-2222222222222222", "김*수 (20대)")
+    assert again.pseudonym_id == "PSN-1111111111111111" and again.masked_display_value == "김*수 (20대)"
+
+
+def test_익명으로_바꾸면_가명ID가_지워지고_다시_가명으로_하면_새_ID(store):
+    u = _user(store)
+    store.upsert_personal_info(u.id, "pseudonym", "PSN-1111111111111111", "홍*동 (30대)")
+    anon = store.upsert_personal_info(u.id, "anonymous", None, "익명")
+    assert anon.pseudonym_id is None and store.get_personal_info(u.id).pseudonym_id is None
+    back = store.upsert_personal_info(u.id, "pseudonym", "PSN-3333333333333333", "홍*동 (30대)")
+    assert back.pseudonym_id == "PSN-3333333333333333"
+
+
+def test_사용자별로_따로_저장된다(store):
+    a, b = _user(store, "aaaa01"), _user(store, "bbbb01")
+    store.upsert_personal_info(a.id, "pseudonym", "PSN-aaaaaaaaaaaaaaaa", "홍*동 (30대)")
+    assert store.get_personal_info(b.id) is None
+
+
+def test_동시에_처음_처리해도_가명ID는_하나로_유지된다(new_store):
+    s0 = new_store(); u = _user(s0); s0.close()
+    results = []
+
+    def run(i):
+        s = new_store()
+        try:
+            results.append(s.upsert_personal_info(u.id, "pseudonym", f"PSN-{i:016x}", "홍*동 (30대)").pseudonym_id)
+        finally:
+            s.close()
+    ts = [threading.Thread(target=run, args=(i,)) for i in range(12)]
+    [t.start() for t in ts]; [t.join() for t in ts]
+    s = new_store()
+    final = s.get_personal_info(u.id).pseudonym_id
+    s.close()
+    assert len(results) == 12 and final is not None
+    assert set(results) == {final}, "동시 요청 중 일부가 서로 다른 가명 ID 를 돌려받았다"
