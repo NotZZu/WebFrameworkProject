@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>가명·익명정보 처리 — 자동화 검증시스템</title>
+<style>
+:root{--navy:#1e2761;--accent:#3d5afe;--bg:#f4f6fa;--muted:#6b7488;--line:#dfe3ee;--warn:#d93025;--warnbg:#fdecea}
+*{box-sizing:border-box}
+body{margin:0;font-family:system-ui,-apple-system,"Noto Sans KR","Malgun Gothic",sans-serif;color:var(--navy);background:var(--bg);min-height:100vh;display:grid;grid-template-columns:240px 1fr}
+aside{background:linear-gradient(180deg,#1e2761,#141a47);color:#c9cfee;padding:24px 16px;display:flex;flex-direction:column}
+.logo{display:flex;align-items:center;gap:10px;color:#fff;font-weight:700;margin:0 8px 28px}
+.logo i{width:30px;height:30px;border-radius:8px;background:var(--accent);display:grid;place-items:center;font-style:normal}
+nav a{display:block;padding:11px 12px;border-radius:9px;margin-bottom:4px;font-size:14px;color:#c9cfee;text-decoration:none}
+nav a.on{background:#2b3580;color:#fff;font-weight:700}
+nav a.soon{opacity:.45;cursor:not-allowed}
+.chip{margin-top:auto;display:flex;align-items:center;gap:10px;padding:10px;background:#2b3580;border-radius:10px;color:#fff;font-size:13px}
+.chip b{display:block}.chip small{color:#c9cfee}
+main{padding:32px 40px;max-width:1100px}
+header{display:flex;justify-content:space-between;align-items:center;margin-bottom:24px}
+h1{margin:0;font-size:24px}.sub{color:var(--muted);font-size:14px;margin-top:4px}
+button{font-family:inherit;cursor:pointer}
+
+.logout{background:none;border:1px solid var(--line);color:var(--navy);border-radius:8px;padding:8px 14px;font-size:13px;margin-left:10px}
+.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:24px}
+.kpi{background:#fff;border-radius:14px;padding:20px;box-shadow:0 2px 10px rgba(30,39,97,.06)}
+.kpi span{font-size:13px;color:var(--muted)}.kpi strong{display:block;font-size:32px;margin-top:8px}
+.kpi.danger strong.alert{color:var(--warn)}
+.kpi.danger.hot{background:var(--warnbg)}
+.grid{display:grid;grid-template-columns:2fr 1fr;gap:16px}
+.panel{background:#fff;border-radius:14px;padding:20px;box-shadow:0 2px 10px rgba(30,39,97,.06)}
+.panel h2{margin:0 0 14px;font-size:16px}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th{text-align:left;color:var(--muted);font-weight:600;padding:8px 6px;border-bottom:1px solid var(--line)}
+td{padding:11px 6px;border-bottom:1px solid #eef0f6}
+.badge{padding:3px 10px;border-radius:99px;font-size:12px;font-weight:700}
+.s-submitted{background:#eef0f6;color:#6b7488}.s-reviewing{background:#e3e9ff;color:var(--accent)}
+.s-approved{background:#e6f4ea;color:#137333}.s-rejected{background:var(--warnbg);color:var(--warn)}
+#recent-empty,.empty{color:var(--muted);text-align:center;padding:24px 0;font-size:14px}
+#notifications{list-style:none;margin:0;padding:0}
+#notifications li{padding:10px 12px;border-radius:10px;background:#f4f6fa;margin-bottom:8px;font-size:13px;line-height:1.5}
+#notifications li.warning{background:var(--warnbg);color:var(--warn);font-weight:700}
+@media(max-width:900px){body{grid-template-columns:1fr}aside{display:none}.kpis{grid-template-columns:repeat(2,1fr)}.grid{grid-template-columns:1fr}}
+
+.btn{display:inline-block;background:var(--accent);color:#fff;border:0;border-radius:10px;padding:11px 18px;font-size:14px;font-weight:700;text-decoration:none;cursor:pointer}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+label{display:block;font-size:13px;color:var(--muted);margin-bottom:6px}
+select{width:100%;padding:11px 12px;border:1px solid var(--line);border-radius:10px;font-size:15px;font-family:inherit;color:var(--navy);background:#fff}
+#privacy-msg{min-height:22px;margin:12px 0 0;font-size:14px}
+#privacy-msg.ok{color:#137333}#privacy-msg.err{color:var(--warn)}
+.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+@media(max-width:900px){.form-grid{grid-template-columns:1fr}}
+input[type=text],input[type=date]{width:100%;padding:11px 12px;border:1px solid var(--line);border-radius:10px;font-size:15px;font-family:inherit;color:var(--navy);background:#fff}
+.field{margin-bottom:16px}
+.radios{display:flex;gap:10px}
+.radios label{flex:1;display:flex;gap:8px;align-items:flex-start;border:1px solid var(--line);border-radius:10px;padding:12px;color:var(--navy);font-size:14px;cursor:pointer;margin:0}
+.radios label small{display:block;color:var(--muted);margin-top:2px}
+.notice{background:#eef2ff;border-radius:10px;padding:12px 14px;font-size:13px;line-height:1.6;margin-bottom:16px}
+dl{margin:0}dt{font-size:13px;color:var(--muted);margin-top:14px}dd{margin:4px 0 0;font-size:18px;font-weight:700;word-break:break-all}
+</style>
+</head>
+<body>
+<aside>
+  <div class="logo"><i>A</i> 자동화 검증시스템</div>
+  <nav>
+    <a href="/dashboard">대시보드</a>
+    <a class="on" href="/privacy">가명·익명정보 처리</a>
+    <a href="/cavp/apply">CAVP 시험 신청</a>
+    <a href="/cavp/status">CAVP 진행상태</a>
+    <a class="soon" title="준비 중">검증서 이력 조회</a>
+    <a class="soon" title="준비 중">위변조 탐지 결과</a>
+  </nav>
+  <div class="chip"><div><b>{{ user.username }}</b><small>{{ {"individual":"개인","company":"기업","institution":"기관"}[user.user_type] }} 사용자</small></div></div>
+</aside>
+<main>
+  <header>
+    <div>
+      <h1>가명·익명정보 처리</h1>
+      <div class="sub">개인정보를 가명 또는 익명으로 바꿔 보관합니다. 입력한 이름과 생년월일 원본은 저장되지 않습니다.</div>
+    </div>
+    <div><button class="logout" id="logout">로그아웃</button></div>
+  </header>
+  <section class="form-grid">
+    <div class="panel"><h2>처리 요청</h2>
+      <div class="notice">원본은 변환에만 쓰이고 바로 버려집니다. 화면과 서버에는 마스킹된 값만 남습니다.</div>
+      <div class="field"><label>처리 방식</label>
+        <div class="radios">
+          <label><input type="radio" name="mode" id="mode-pseudonym" value="pseudonym" checked><span>가명 처리<small>가명 ID 발급 + 이름 마스킹 + 연령대</small></span></label>
+          <label><input type="radio" name="mode" id="mode-anonymous" value="anonymous"><span>익명 처리<small>식별 가능한 값을 남기지 않음</small></span></label>
+        </div></div>
+      <div class="field"><label for="name">이름</label><input type="text" id="name" maxlength="50" autocomplete="off" placeholder="예: 홍길동"></div>
+      <div class="field"><label for="birthdate">생년월일</label><input type="date" id="birthdate" autocomplete="off"></div>
+      <p style="margin:0"><button class="btn" id="submit-privacy" type="button">처리하기</button></p>
+      <div id="privacy-msg" role="status" aria-live="polite"></div>
+    </div>
+    <div class="panel"><h2>내 처리 결과</h2>
+      <div id="result-empty" class="empty">아직 처리한 내용이 없습니다.</div>
+      <dl id="result" hidden>
+        <dt>처리 방식</dt><dd id="result-level"></dd>
+        <dt>표시값</dt><dd id="result-display"></dd>
+        <dt>가명 ID</dt><dd id="result-pid"></dd>
+      </dl>
+    </div>
+  </section>
+</main>
+<script>
+const $ = id => document.getElementById(id);
+const LEVELS = {pseudonym: "가명 처리", anonymous: "익명 처리"};
+function say(text, kind) { const m = $("privacy-msg"); m.textContent = text; m.className = kind; }
+async function api(url, opt) {
+  const r = await fetch(url, opt);
+  if (r.status === 401) { location.href = "/"; throw new Error("auth"); }
+  return r;
+}
+function show(d) {
+  $("result-empty").hidden = true; $("result").hidden = false;
+  $("result-level").textContent = LEVELS[d.level] || d.level;
+  $("result-display").textContent = d.display;
+  $("result-pid").textContent = d.pseudonym_id || "없음 (익명)";
+}
+async function loadMine() {
+  const r = await api("/api/privacy/me");
+  if (r.status === 200) show(await r.json());
+}
+$("submit-privacy").onclick = async () => {
+  const mode = document.querySelector("input[name=mode]:checked").value;
+  const name = $("name").value.trim(), birthdate = $("birthdate").value;
+  if (!name) return say("이름을 입력해 주세요.", "err");
+  if (!birthdate) return say("생년월일을 입력해 주세요.", "err");
+  $("submit-privacy").disabled = true;
+  try {
+    const r = await api("/api/privacy/process", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({mode, name, birthdate})});
+    const d = await r.json();
+    if (r.status === 200) { show(d); say(LEVELS[d.level] + "가 완료되었습니다. 입력한 원본은 저장되지 않았습니다.", "ok"); $("name").value = ""; $("birthdate").value = ""; }
+    else say((d.error && d.error.message) || "처리하지 못했습니다. 잠시 후 다시 시도해 주세요.", "err");
+  } catch (e) { if (e.message !== "auth") say("네트워크 오류가 발생했습니다.", "err"); }
+  finally { $("submit-privacy").disabled = false; }
+};
+$("logout").onclick = async () => { await fetch("/api/auth/logout", {method: "POST"}); location.href = "/"; };
+loadMine();
+</script>
+</body>
+</html>

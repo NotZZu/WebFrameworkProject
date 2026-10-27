@@ -109,5 +109,21 @@ class SqlStore(Store):
     def get_personal_info(self, user_id):
         return self.session.scalar(select(PersonalInfo).where(PersonalInfo.user_id == user_id))
 
+    def upsert_personal_info(self, user_id, level, new_pseudonym_id, masked_display_value):
+        for _ in range(2):  # 동시에 첫 저장이 겹치면(user_id 유일 제약) 한 번 더 읽어 갱신으로 처리
+            row = self.get_personal_info(user_id)
+            if row is None:
+                row = PersonalInfo(user_id=user_id)
+                self.session.add(row)
+            row.anonymization_level = level
+            row.masked_display_value = masked_display_value
+            row.pseudonym_id = (row.pseudonym_id or new_pseudonym_id) if level == "pseudonym" else None
+            try:
+                self.session.commit()
+                return row
+            except IntegrityError:
+                self.session.rollback()
+        raise RuntimeError("personal_info 저장 충돌이 해소되지 않았습니다.")
+
     def close(self):
         self.session.close()

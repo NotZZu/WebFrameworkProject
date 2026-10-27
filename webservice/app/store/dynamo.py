@@ -14,6 +14,7 @@
 | 신청 사본(전체) | ALL                   | APP#<시각>#<id>      | 기관 전체 목록 |
 | 진행 중 잠금    | ACTIVE#<user>#<알고리즘> | -                 | 같은 알고리즘 진행 중 신청 1건 제한(DF-13) |
 | 로그인 시도     | THROTTLE#<아이디>     | -                    | 실패 횟수·만료(DynamoThrottle) |
+| 가명·익명 결과  | PI#<user_id>          | -                    | 사용자당 1건(마스킹된 값만, 원본 없음) |
 
 신청의 본체·사본·잠금은 항상 한 트랜잭션으로 함께 바뀐다(쪼개면 목록과 상태가 어긋난다).
 """
@@ -22,7 +23,7 @@ from datetime import datetime, timezone
 from decimal import Decimal
 
 from ..errors import DuplicateApplicationError, DuplicateUsernameError
-from ..models import ActiveSession, CavpApplication, User
+from ..models import ActiveSession, CavpApplication, PersonalInfo, User
 from .base import Store
 
 SESSION_TTL_SECONDS = 7 * 24 * 3600
@@ -66,6 +67,12 @@ def _user(it) -> User:
 def _app(it) -> CavpApplication:
     return CavpApplication(id=_int(it["id"]), user_id=_int(it["user_id"]), algorithm_type=it["algorithm_type"],
                            status=it["status"], submitted_at=_dt(it["submitted_at"]), updated_at=_dt(it["updated_at"]))
+
+
+def _pinfo(it) -> PersonalInfo:
+    return PersonalInfo(id=_int(it["user_id"]), user_id=_int(it["user_id"]), pseudonym_id=it.get("pseudonym_id"),
+                        anonymization_level=it["level"], masked_display_value=it["masked"],
+                        created_at=_dt(it["created_at"]))
 
 
 def _reasons(exc) -> list:
@@ -235,12 +242,31 @@ class DynamoStore(Store):
     def all_applications(self, user_id):
         return [_app(i) for i in self._query_apps("ALL" if user_id is None else f"USER#{user_id}")]
 
-    # ---- 검증서·가명정보: 구현 전(6단계에서 서비스와 함께 추가). 지금은 저장되는 데이터가 없다. ----
+    # ---- 검증서: 구현 전(6단계 SC-06 에서 추가). 지금은 저장되는 데이터가 없다. ----
     def list_certificates(self, user_id):
         return []
 
+    # ---- 가명·익명 처리 결과 ----
     def get_personal_info(self, user_id):
-        return None
+        if isinstance(user_id, bool) or not isinstance(user_id, int):
+            return None
+        it = self._get(f"PI#{user_id}")
+        return _pinfo(it) if it else None
+
+    def upsert_personal_info(self, user_id, level, new_pseudonym_id, masked_display_value):
+        # 항목 하나를 한 번의 UpdateItem 으로 갱신한다: 가명 ID 는 '없을 때만' 채우므로 동시에 여러 번 불러도 하나로 유지된다.
+        values = {":lv": level, ":mk": masked_display_value, ":uid": user_id, ":now": _ts(_now())}
+        sets = "#lv = :lv, masked = :mk, user_id = :uid, created_at = if_not_exists(created_at, :now)"
+        if level == "pseudonym":
+            sets += ", pseudonym_id = if_not_exists(pseudonym_id, :pid)"
+            values[":pid"] = new_pseudonym_id
+            expr = "SET " + sets
+        else:
+            expr = "SET " + sets + " REMOVE pseudonym_id"
+        r = self.table.update_item(Key={"pk": f"PI#{user_id}", "sk": "-"}, UpdateExpression=expr,
+                                   ExpressionAttributeNames={"#lv": "level"}, ExpressionAttributeValues=values,
+                                   ReturnValues="ALL_NEW")
+        return _pinfo(r["Attributes"])
 
 
 class DynamoThrottle:

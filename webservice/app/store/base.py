@@ -63,6 +63,11 @@ class Store:
         """없으면 None."""
         raise NotImplementedError
 
+    def upsert_personal_info(self, user_id, level, new_pseudonym_id, masked_display_value):
+        """사용자당 1건을 만들거나 갱신해 돌려준다. level='pseudonym' 이면 이미 가명 ID 가 있을 때 그대로 두고
+        없을 때만 new_pseudonym_id 를 쓴다(동시에 여러 번 불러도 ID 하나). 'anonymous' 이면 가명 ID 를 지운다."""
+        raise NotImplementedError
+
     def close(self):
         pass
 

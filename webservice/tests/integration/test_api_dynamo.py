@@ -159,3 +159,21 @@ def test_테이블_이름이_없으면_기동하지_않는다():
 def test_알_수_없는_저장소_종류는_기동하지_않는다():
     with pytest.raises(RuntimeError, match="STORE_BACKEND"):
         create_app({"TESTING": True, "STORE_BACKEND": "mysql"})
+
+
+def test_가명_처리와_조회_원본은_저장되지_않는다(app):
+    c = app.test_client()
+    signup(c, "dyn_priv01")
+    login(c, "dyn_priv01")
+    assert c.get("/api/privacy/me").status_code == 404
+    r = c.post("/api/privacy/process", json={"mode": "pseudonym", "name": "홍길동", "birthdate": "1990-04-12"})
+    assert r.status_code == 200 and r.get_json()["pseudonym_id"].startswith("PSN-")
+    first = r.get_json()["pseudonym_id"]
+    again = c.post("/api/privacy/process", json={"mode": "pseudonym", "name": "김철수", "birthdate": "1985-01-01"})
+    assert again.get_json()["pseudonym_id"] == first and again.get_json()["display"].startswith("김*수")
+    items = boto3.resource("dynamodb", region_name=REGION).Table("svc").scan()["Items"]
+    dump = str(items)
+    assert "홍길동" not in dump and "김철수" not in dump and "1990-04-12" not in dump
+    anon = c.post("/api/privacy/process", json={"mode": "anonymous", "name": "홍길동", "birthdate": "1990-04-12"})
+    assert anon.get_json() == {"level": "anonymous", "pseudonym_id": None, "display": "익명"}
+    assert c.get("/api/dashboard").get_json()["privacy"] == {"processed": True, "level": "anonymous"}

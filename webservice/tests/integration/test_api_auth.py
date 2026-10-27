@@ -116,8 +116,8 @@ _TODO = pytest.mark.xfail(strict=True, reason="TDD Red: 해당 API 구현 전 (�
 
 @case("IT-11", "FR-01", "보호 API: 미로그인 호출", "401 반환, 어떤 레코드도 생성되지 않음", "security")
 @pytest.mark.parametrize("method,url,body", [
-    pytest.param("post", "/api/privacy/process", {"mode": "anonymous", "name": "홍길동", "birthdate": "1990-04-12"}, marks=_TODO),
-    pytest.param("get", "/api/privacy/me", None, marks=_TODO),
+    ("post", "/api/privacy/process", {"mode": "anonymous", "name": "홍길동", "birthdate": "1990-04-12"}),
+    ("get", "/api/privacy/me", None),
     ("post", "/api/cavp/applications", {"algorithm_type": "AES"}),
     ("get", "/api/cavp/applications", None),
     ("get", "/api/cavp/applications/1", None),
