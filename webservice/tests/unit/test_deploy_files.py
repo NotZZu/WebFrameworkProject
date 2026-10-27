@@ -1,89 +1,56 @@
-"""도구 시험: 배포 설정 파일(deploy/) — 문법과 핵심 설정 점검. 실제 AWS 에 올리기 전에 CI 에서 먼저 걸러낸다."""
+"""도구 시험: 배포 파일(deploy/, requirements-lambda.txt) — 요금이 생길 수 있는 구성이 다시 섞여 들어오지 않도록 CI 에서 걸러낸다."""
 import pathlib
+import re
 import subprocess
+import zipfile
 
 import pytest
 
-yaml = pytest.importorskip("yaml")
-DEPLOY = pathlib.Path(__file__).resolve().parents[3] / "deploy"
+ROOT = pathlib.Path(__file__).resolve().parents[3]
+DEPLOY = ROOT / "deploy"
 pytestmark = pytest.mark.skipif(not DEPLOY.exists(), reason="배포 파일(deploy/) 없음")
 
 
-class _Loader(yaml.SafeLoader):
-    pass
+def test_옛_EC2_구성_파일이_남아있지_않다():
+    for name in ("cloudformation.yml", "bootstrap.sh", "update.sh", "docker-compose.yml", "Dockerfile.service",
+                 "Dockerfile.demo", "service.env"):
+        assert not (DEPLOY / name).exists(), f"{name}: 요금이 생길 수 있는 EC2 구성은 쓰지 않는다"
 
 
-# CloudFormation 단축 태그(!Ref, !Sub, !GetAtt …)를 일반 값으로 읽는다.
-_Loader.add_multi_constructor("!", lambda loader, suffix, node: (
-    loader.construct_scalar(node) if isinstance(node, yaml.ScalarNode)
-    else loader.construct_sequence(node) if isinstance(node, yaml.SequenceNode)
-    else loader.construct_mapping(node)))
+def test_배포_파일에_유료_자원_이름이_없다():
+    text = "\n".join(p.read_text(encoding="utf-8") for p in (DEPLOY / "build_lambda.sh", ))
+    text += (ROOT / "webservice" / "requirements-lambda.txt").read_text(encoding="utf-8")
+    for word in ("ElasticIP", "AWS::EC2", "AWS::RDS", "NatGateway", "ApiGateway"):
+        assert word not in text
 
 
-def load(name):
-    return yaml.load((DEPLOY / name).read_text(encoding="utf-8"), Loader=_Loader)
+def test_빌드_스크립트_문법과_Lambda용_바퀴_지정():
+    script = DEPLOY / "build_lambda.sh"
+    assert subprocess.run(["bash", "-n", str(script)], capture_output=True).returncode == 0
+    body = script.read_text(encoding="utf-8")
+    assert "manylinux2014_x86_64" in body and "--python-version 3.12" in body and "--only-binary=:all:" in body
 
 
-def test_cloudformation_has_required_resources_and_outputs():
-    t = load("cloudformation.yml")
-    types = {r["Type"] for r in t["Resources"].values()}
-    assert {"AWS::EC2::Instance", "AWS::EC2::SecurityGroup", "AWS::EC2::EIP", "AWS::EC2::EIPAssociation"} <= types
-    assert {"ServiceUrl", "DemoUrl"} <= set(t["Outputs"])
-    assert t["Parameters"]["InstanceType"]["Default"] == "t3.micro"
+def test_Lambda_requirements에_boto3가_없다():
+    reqs = (ROOT / "webservice" / "requirements-lambda.txt").read_text(encoding="utf-8")
+    names = {re.split(r"[<>=!~ ]", ln)[0].lower() for ln in reqs.splitlines() if ln.strip() and not ln.startswith("#")}
+    assert {"flask", "sqlalchemy", "bcrypt"} <= names and "boto3" not in names
 
 
-def test_security_group_exposes_only_web_ports_not_ssh():
-    sg = load("cloudformation.yml")["Resources"]["AppSecurityGroup"]["Properties"]["SecurityGroupIngress"]
-    assert sorted(r["FromPort"] for r in sg) == [80, 8080]
+def test_안내서에_무료_범위_설정이_모두_있다():
+    doc = (DEPLOY / "README.md").read_text(encoding="utf-8")
+    for must in ("프로비저닝", "10", "TTL", "ttl", "lambda_handler.handler", "python3.12", "x86_64", "AuthType", "NONE",
+                 "CachingDisabled", "예산", "SECRET_KEY", "PSEUDONYM_SECRET", "DYNAMODB_TABLE", "삭제"):
+        assert must in doc, f"deploy/README.md 에 '{must}' 설명이 있어야 한다"
+    assert not re.search(r"(AKIA|aws_secret_access_key\s*=\s*\S{20})", doc)
 
 
-def test_instance_requires_imdsv2():
-    inst = load("cloudformation.yml")["Resources"]["AppInstance"]["Properties"]
-    assert inst["MetadataOptions"]["HttpTokens"] == "required"
-
-
-def test_compose_runs_service_and_demo_separately():
-    c = load("docker-compose.yml")["services"]
-    assert set(c) == {"service", "demo"}
-    assert c["service"]["ports"] == ["80:8000"] and c["demo"]["ports"] == ["8080:8000"]
-    assert "/data" in c["service"]["volumes"][0]          # 서비스 DB 는 볼륨에 보존
-    assert not c["demo"].get("volumes")                    # 시연 서버는 서비스 데이터에 접근하지 않음
-
-
-@pytest.mark.parametrize("script", ["bootstrap.sh", "update.sh"])
-def test_shell_scripts_have_valid_syntax(script):
-    r = subprocess.run(["bash", "-n", str(DEPLOY / script)], capture_output=True, text=True)
+def test_zip을_만들면_핸들러와_앱이_들어있다(tmp_path):
+    out = tmp_path / "l.zip"
+    r = subprocess.run(["bash", str(DEPLOY / "build_lambda.sh"), str(out)], capture_output=True, text=True, timeout=240)
+    if r.returncode != 0 and ("Could not find a version" in r.stderr or "Connection" in r.stderr or "No matching" in r.stderr):
+        pytest.skip("패키지 내려받기 불가(오프라인)")
     assert r.returncode == 0, r.stderr
-
-
-def test_no_secret_values_committed():
-    text = "".join(p.read_text(encoding="utf-8", errors="ignore") for p in DEPLOY.iterdir() if p.is_file())
-    assert "AKIA" not in text and "aws_secret_access_key" not in text.lower()
-
-
-def test_cloudformation_serves_https_via_cloudfront():
-    t = load("cloudformation.yml")
-    cdn = [r for r in t["Resources"].values() if r["Type"] == "AWS::CloudFront::Distribution"]
-    assert len(cdn) == 2
-    for c in cdn:
-        b = c["Properties"]["DistributionConfig"]["DefaultCacheBehavior"]
-        assert b["ViewerProtocolPolicy"] == "redirect-to-https"
-
-
-def test_cloudformation_has_budget_guard_that_stops_ec2():
-    t = load("cloudformation.yml")
-    types = {r["Type"] for r in t["Resources"].values()}
-    assert {"AWS::Budgets::Budget", "AWS::Budgets::BudgetsAction"} <= types
-    act = t["Resources"]["BudgetStopAction"]["Properties"]
-    assert act["Definition"]["SsmActionDefinition"]["Subtype"] == "STOP_EC2_INSTANCES"
-
-
-def test_demo_reads_service_url_from_env_file():
-    c = load("docker-compose.yml")
-    assert c["services"]["demo"]["env_file"] == ["service.env"]
-    assert (DEPLOY / "service.env").exists()
-
-
-def test_demo_image_includes_deploy_files():
-    """시연 이미지에 deploy/ 가 들어가야 이 파일의 시험이 시연 화면에서 건너뛰어지지 않는다."""
-    assert "COPY deploy /app/deploy" in (DEPLOY / "Dockerfile.demo").read_text(encoding="utf-8")
+    names = set(zipfile.ZipFile(out).namelist())
+    assert "lambda_handler.py" in names and "app/__init__.py" in names
+    assert not any(n.startswith("boto3/") for n in names)

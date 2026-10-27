@@ -1,43 +1,89 @@
-# AWS 배포 가이드
+# 배포 안내 — 요금이 청구되지 않는 서버리스 구성
 
-한 대의 EC2(프리티어 우선)에서 **웹 서비스(포트 80)** 와 **시험 시연 페이지(포트 8080)** 를 서로 다른 Docker 컨테이너로 운영합니다.
-내 PC 가 꺼져 있어도 인터넷 주소로 접속할 수 있고, main 브랜치가 갱신되면 서버가 3분 안에 자동으로 새 버전으로 바뀝니다.
+AWS **상시 무료(Always Free)** 서비스만 씁니다. 서버(EC2), 고정 IP, 디스크(EBS), S3, API Gateway 는 쓰지 않습니다.
 
 ```
-GitHub main (CI 시험 전부 통과한 코드만 병합)
-      │  3분마다 git fetch → 서비스·배포 코드가 바뀌었으면 재빌드
-      ▼
-EC2 (Amazon Linux 2023, Docker Compose)
- ├─ service  :80    Flask + gunicorn, 데이터는 /opt/app-data/service (SQLite, 재시작해도 유지)
- └─ demo     :8080  시험 시연 서버(pytest + Chromium 실행), 서비스 데이터에 접근하지 않음
+사용자 → CloudFront(무료 1TB·1천만 요청) → Lambda 함수 URL(무료 100만 요청) → DynamoDB(무료 25GB, 프로비저닝 10/10)
 ```
 
-## 1. 최초 배포 (한 번만, 약 10분)
+| 서비스 | 쓰는 이유 | 무료 한도(매월·상시) | 주의 |
+|---|---|---|---|
+| Lambda | Flask 앱 실행 | 100만 요청, 40만 GB-초 | 함수 URL 이용 시 별도 요금 없음 |
+| DynamoDB | 사용자·세션·신청 저장 | 25GB, 읽기/쓰기 용량 합계 25 | **프로비저닝 모드만 무료**(온디맨드는 요금 발생) |
+| CloudFront | HTTPS 주소와 전달 | 1TB 전송, 1천만 요청 | |
+| 예산(Budgets) | 이상 징후 알림 | 무료 | |
 
-1. AWS 콘솔에 로그인하고 오른쪽 위 리전을 **아시아 태평양(서울) ap-northeast-2** 로 바꿉니다.
-2. **CloudFormation → 스택 생성 → 새 리소스 사용 → 템플릿 파일 업로드** 에서 이 폴더의 `cloudformation.yml` 을 올립니다.
-3. 스택 이름 `verification-system`, 파라미터는 기본값 그대로 두고 다음으로 진행합니다.
-   - 마지막 화면에서 *"IAM 리소스를 생성할 수 있음을 승인합니다"* 에 체크해야 합니다(서버 관리용 SSM 역할 생성).
-4. 스택이 `CREATE_COMPLETE` 가 되면 **출력** 탭에서 `ServiceUrl`, `DemoUrl` 을 확인합니다.
-5. 서버 안에서 이미지를 빌드하므로 **스택 완료 후 8~15분** 더 기다린 뒤 접속하세요(브라우저 이미지 빌드가 가장 오래 걸립니다).
+## 1. 준비 — 배포 파일 만들기
 
-> 메모리가 모자라 시험 시연이 중간에 멈추면 파라미터 `InstanceType` 을 `t3.small` 로 바꿔 스택을 업데이트하세요(프리티어 대상이 아닐 수 있음).
+저장소 루트에서 `bash deploy/build_lambda.sh` → `lambda.zip` (약 5MB). AWS 계정 없이 만들 수 있습니다.
 
-## 2. 이후 업데이트
+## 2. 옛 구성 삭제 (요금 차단)
 
-따로 할 일이 없습니다. 기능을 개발해 push → CI 통과 → main 자동 병합 → **3분 안에 서버 자동 반영**.
-즉시 반영하려면 서버에서 `sudo /opt/app/repo/deploy/update.sh --force`.
+CloudFormation 콘솔 → 스택 `verification-system` → **삭제**. 삭제 후 EC2·Elastic IP·EBS 가 모두 사라졌는지 EC2 콘솔에서 확인합니다.
 
-## 3. 상태 확인 · 문제 해결
+## 3. DynamoDB 표 만들기 (리전: 서울 ap-northeast-2)
 
-- 콘솔 **EC2 → 인스턴스 → 연결 → Session Manager** 로 접속(SSH 포트는 닫혀 있음).
-- 최초 구성 로그: `sudo tail -f /var/log/app-bootstrap.log`
-- 컨테이너 상태: `sudo docker ps` / 로그: `sudo docker logs deploy-service-1`, `sudo docker logs deploy-demo-1`
-- 상태 확인 주소: `http://<IP>/healthz`, `http://<IP>:8080/healthz`
+1. 표 이름 `verification-system`, 파티션 키 `pk`(문자열), 정렬 키 `sk`(문자열)
+2. 설정 → **사용자 지정 설정** → 용량 모드 **프로비저닝**, 읽기 **10**, 쓰기 **10**, **Auto Scaling 끔**
+3. 보조 인덱스는 만들지 않습니다(용량 합계가 늘어납니다).
+4. 만든 뒤 표 → 추가 설정 → **TTL** 켜기, 속성 이름 `ttl` (만료된 세션·시도 기록 자동 삭제)
 
-## 4. 보안·비용 메모
+## 4. Lambda 함수 만들기
 
-- 비밀키(`SECRET_KEY`, `PSEUDONYM_SECRET`)는 서버에서 처음 한 번 무작위로 생성해 `/opt/app/.env`(권한 600)에만 보관합니다. 저장소에는 없습니다.
-- 현재는 도메인·HTTPS 없이 IP 로 접속하는 시연용 구성입니다(비밀번호는 서버에서 bcrypt 로만 저장되지만 전송은 HTTP). 도메인을 연결하면 HTTPS 로 확장할 수 있습니다.
-- 인스턴스·고정 IP·디스크가 과금 대상입니다. 프리티어/크레딧 범위를 AWS 콘솔의 *결제 → 프리티어* 에서 확인하세요. **발표가 끝나면 스택을 삭제**하면 모든 리소스가 함께 정리됩니다.
-- 시험 시연 서버는 한 번에 한 건만 실행하며 제한 시간(7분)이 있습니다.
+1. 함수 이름 `verification-system`, 런타임 **python3.12**, 아키텍처 **x86_64**
+2. 코드 → 업로드 → `lambda.zip` (5MB 이하라 S3 없이 직접 올립니다)
+3. 런타임 설정 → 핸들러 `lambda_handler.handler`
+4. 구성 → 일반 구성: 메모리 512MB, 제한 시간 15초
+5. 구성 → 환경 변수
+   - `STORE_BACKEND` = `dynamodb`
+   - `DYNAMODB_TABLE` = `verification-system`
+   - `SECRET_KEY` = 임의의 긴 문자열(32자 이상)
+   - `PSEUDONYM_SECRET` = 위와 다른 임의의 긴 문자열
+   - `ORIGIN_VERIFY` = 또 다른 임의 문자열(5-3 의 헤더 값과 같아야 함)
+6. 구성 → 권한 → 실행 역할에 인라인 정책 추가: 대상 표 하나에 대해서만
+   `dynamodb:GetItem, PutItem, UpdateItem, DeleteItem, Query, TransactWriteItems, BatchGetItem` 허용
+7. 구성 → 함수 URL 만들기 → 인증 유형(AuthType) **NONE**
+   (CloudFront 의 OAC(AWS_IAM)는 브라우저가 보내는 JSON POST 에서 서명 불일치가 나서 쓰지 않습니다. 대신 `ORIGIN_VERIFY` 비밀 헤더로 CloudFront 를 거치지 않은 호출을 막습니다.)
+8. 가능하면 구성 → 동시성 → **예약된 동시성 5** (새 계정은 허용되지 않을 수 있습니다. 안 되면 건너뜁니다.)
+
+## 5. CloudFront 배포 만들기
+
+1. 오리진: 함수 URL 의 호스트 이름(`https://` 와 끝 `/` 제외), 프로토콜 HTTPS 만
+2. 오리진 사용자 지정 헤더: 이름 `x-origin-verify`, 값 = 4-5 의 `ORIGIN_VERIFY`
+3. 동작(기본): 뷰어 프로토콜 **Redirect HTTP to HTTPS**, 허용 메서드 **GET, HEAD, OPTIONS, PUT, POST, PATCH, DELETE**,
+   캐시 정책 **CachingDisabled**, 오리진 요청 정책 **AllViewerExceptHostHeader**(쿠키·헤더 전달, Host 제외)
+4. 요금제는 **무료(Free)** 를 고릅니다. WAF 는 켜지 않습니다(유료).
+5. 배포 완료 후 `https://dXXXX.cloudfront.net` 가 서비스 주소입니다.
+
+## 6. 요금 안전장치
+
+- Billing → **예산** → 월 예산 **0.01달러**, 실제 사용액이 0.01달러를 넘으면 이메일 알림
+- Billing → 무료 한도 알림(Free tier usage alerts) 켜기
+- Cost Explorer 에서 서비스별 비용이 0 인지 주 1회 확인
+
+## 7. 배포 후 점검 목록
+
+| # | 점검 | 기대 결과 |
+|---|---|---|
+| 1 | `https://<주소>/healthz` | 200 |
+| 2 | Lambda 함수 URL 을 **직접** 호출 | 403 (CloudFront 를 거쳐야만 통과) |
+| 3 | 회원가입 → 로그인 → 내 정보 | 모두 성공, 쿠키에 Secure·HttpOnly |
+| 4 | 로그아웃 후 이전 쿠키로 내 정보 | 401 |
+| 5 | 틀린 비밀번호 5회 | 잠금(429), 15분 뒤 해제 |
+| 6 | 같은 알고리즘 시험 신청 2회 | 두 번째는 409 |
+| 7 | 시험 기관으로 승인 → 같은 신청 재승인 | 두 번째는 409 |
+| 8 | 새로고침 후 로그인 유지 | 유지(세션이 DynamoDB 에 저장됨) |
+| 9 | DynamoDB 표 항목 수·용량 모드 | 프로비저닝 10/10, 항목 생성됨 |
+| 10 | 다음 날 Cost Explorer | 0달러 |
+
+## 8. 한계
+
+- 실제 AWS 에서의 동작은 위 점검 목록으로 확인해야 합니다. 자동 시험은 AWS 를 흉내 내는 도구(moto)로 합니다.
+- 첫 요청은 1~2초 느릴 수 있습니다(콜드 스타트).
+- 누군가 대량으로 호출하면 무료 한도를 넘을 수 있습니다. 예산 알림과 예약된 동시성이 방어선이며, 알림이 오면 함수 URL 을 비활성화하세요.
+- 인증서·개인정보 저장은 아직 DynamoDB 에 구현되지 않았습니다(6단계에서 추가).
+
+## 9. 업데이트·삭제
+
+- 코드 수정 후: `bash deploy/build_lambda.sh` → Lambda 콘솔에서 다시 업로드
+- 전체 삭제: CloudFront(비활성화 후 삭제) → Lambda → DynamoDB 순서
