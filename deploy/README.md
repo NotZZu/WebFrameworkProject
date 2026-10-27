@@ -51,7 +51,7 @@ CloudFormation 콘솔 → 스택 `verification-system` → **삭제**. 삭제 �
 1. 오리진: 함수 URL 의 호스트 이름(`https://` 와 끝 `/` 제외), 프로토콜 HTTPS 만
 2. 오리진 사용자 지정 헤더: 이름 `x-origin-verify`, 값 = 4-5 의 `ORIGIN_VERIFY`
 3. 동작(기본): 뷰어 프로토콜 **Redirect HTTP to HTTPS**, 허용 메서드 **GET, HEAD, OPTIONS, PUT, POST, PATCH, DELETE**,
-   캐시 정책 **CachingDisabled**, 오리진 요청 정책 **AllViewerExceptHostHeader**(쿠키·헤더 전달, Host 제외)
+   캐시 정책 **CachingDisabled**, 오리진 요청 정책은 **직접 만든 정책**(헤더 없음, 쿠키 전체, 쿼리스트링 전체). 관리형 `AllViewerExceptHostHeader` 를 쓰면 Lambda 함수 URL 이 CloudFront 경유 요청만 AccessDenied(403, `{"Message":null}`)로 거절했습니다(실제 배포에서 확인)
 4. 요금제는 **무료(Free)** 를 고릅니다. WAF 는 켜지 않습니다(유료).
 5. 배포 완료 후 `https://dXXXX.cloudfront.net` 가 서비스 주소입니다.
 
