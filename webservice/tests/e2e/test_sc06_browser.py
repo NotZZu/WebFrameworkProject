@@ -117,8 +117,9 @@ def test_institution_issue(srv, browser_page):
     browser_page.select_option("#issue-app", str(aid))
     browser_page.fill("#issue-content", "시험 결과 본문")
     browser_page.click("#issue-submit")
+    browser_page.wait_for_function("document.getElementById('issue-msg').innerText.trim() !== ''")
     browser_page.wait_for_function("document.querySelectorAll('#certs-body tr.item').length >= 1")
-    assert browser_page.inner_text("#issue-msg").strip() != ""
+    assert "발급" in browser_page.inner_text("#issue-msg")
     shot(browser_page, "sc06_2_issue")
 
 
