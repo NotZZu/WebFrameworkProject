@@ -1,4 +1,4 @@
-"""화면(HTML) 라우트: SC-01 로그인/회원가입, SC-02 대시보드, SC-03 가명·익명정보 처리, SC-04/05 CAVP."""
+"""화면(HTML) 라우트: SC-01 로그인/회원가입, SC-02 대시보드, SC-03 가명·익명정보 처리, SC-04/05 CAVP, SC-06 검증서 이력, SC-07 위변조 탐지."""
 from flask import Blueprint, jsonify, redirect, render_template, url_for
 
 from .api.helpers import session_user
@@ -27,6 +27,22 @@ def privacy():
     if user is None:
         return redirect(url_for("pages.login_page"))
     return render_template("privacy.html", user=user)
+
+
+@bp.get("/certificates")
+def certificates():
+    user = session_user()
+    if user is None:
+        return redirect(url_for("pages.login_page"))
+    return render_template("certificates.html", user=user, page="history")
+
+
+@bp.get("/tamper")
+def tamper():
+    user = session_user()
+    if user is None:
+        return redirect(url_for("pages.login_page"))
+    return render_template("certificates.html", user=user, page="tamper")
 
 
 @bp.get("/cavp/apply")

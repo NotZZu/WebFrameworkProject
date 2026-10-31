@@ -1,35 +1,7 @@
 # TDD Red 목록: 아직 구현되지 않은 케이스 ID (한 줄에 하나).
 # 이 케이스들은 xfail(strict)로 실행된다 — 실패해도 CI 통과, 예기치 않게 통과하면 CI 실패(목록에서 지우라는 신호).
 # 화면/기능을 구현해 케이스가 통과하면 해당 ID를 이 파일에서 삭제한다.
-IT-25
-IT-26
-IT-27
-IT-28
-IT-29
-IT-30
-IT-31
 IT-32
-UT-CERT-01
-UT-CERT-02
-UT-CERT-03
-UT-CERT-04
-UT-CERT-05
-UT-CERT-06
-UT-CERT-07
-UT-CERT-08
-UT-CERT-09
-UT-CERT-10
-UT-CERT-11
-UT-CERT-12
-UT-CERT-13
-UT-CERT-14
-UT-CERT-15
-UT-CERT-16
-UT-CERT-17
-UT-CERT-18
-UT-CERT-19
-UT-CERT-20
-UT-CERT-21
 UT-SEED-01
 UT-SEED-02
 UT-SEED-03

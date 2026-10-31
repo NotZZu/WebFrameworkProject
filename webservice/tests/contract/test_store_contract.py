@@ -238,3 +238,64 @@ def test_동시에_처음_처리해도_가명ID는_하나로_유지된다(new_st
     s.close()
     assert len(results) == 12 and final is not None
     assert set(results) == {final}, "동시 요청 중 일부가 서로 다른 가명 ID 를 돌려받았다"
+
+
+# ---- 검증서 ----
+def _approved_app(store, name="owner01"):
+    u = _user(store, name)
+    a = store.create_application(u.id, "AES")
+    store.change_application_status(a.id, "submitted", "reviewing")
+    store.change_application_status(a.id, "reviewing", "approved")
+    return u, a
+
+
+def test_검증서_저장_후_조회_내용_읽기(store, tmp_path):
+    _, a = _approved_app(store)
+    c = store.create_certificate(a.id, "CAVP", "h" * 64, b"BODY\x00\xff", str(tmp_path))
+    got = store.get_certificate(c.id)
+    assert (got.application_id, got.cert_type, got.integrity_hash, got.tamper_status) == (a.id, "CAVP", "h" * 64, "normal")
+    assert isinstance(got.issued_at, datetime)
+    assert store.read_certificate_content(c.id, str(tmp_path)) == b"BODY\x00\xff"
+    assert store.get_certificate(9999) is None and store.read_certificate_content(9999, str(tmp_path)) is None
+
+
+def test_같은_신청에_두_번_발급하면_중복_오류(store, tmp_path):
+    _, a = _approved_app(store)
+    store.create_certificate(a.id, "CAVP", "h" * 64, b"x", str(tmp_path))
+    with pytest.raises(DuplicateApplicationError):
+        store.create_certificate(a.id, "KCMVP", "h" * 64, b"y", str(tmp_path))
+    assert len(store.list_certificates(None)) == 1
+
+
+def test_동시에_같은_신청에_발급하면_한_건만_성공한다(new_store, tmp_path):
+    s0 = new_store(); _, a = _approved_app(s0); s0.close()
+    ok, dup = [], []
+
+    def run():
+        s = new_store()
+        try:
+            s.create_certificate(a.id, "CAVP", "h" * 64, b"x", str(tmp_path))
+            ok.append(1)
+        except DuplicateApplicationError:
+            dup.append(1)
+        finally:
+            s.close()
+    ts = [threading.Thread(target=run) for _ in range(8)]
+    [t.start() for t in ts]; [t.join() for t in ts]
+    assert (len(ok), len(dup)) == (1, 7)
+    s = new_store(); assert len(s.list_certificates(None)) == 1; s.close()
+
+
+def test_검증서_목록은_사용자별_전체별이고_상태변경이_목록에도_반영된다(store, tmp_path):
+    u1, a1 = _approved_app(store, "owner01")
+    u2, a2 = _approved_app(store, "owner02")
+    c1 = store.create_certificate(a1.id, "CAVP", "h" * 64, b"x", str(tmp_path))
+    c2 = store.create_certificate(a2.id, "KCMVP", "h" * 64, b"y", str(tmp_path))
+    assert [c.id for c in store.list_certificates(u1.id)] == [c1.id]
+    assert {c.id for c in store.list_certificates(None)} == {c1.id, c2.id}
+    changed = store.set_tamper_status(c1.id, "suspected")
+    assert changed.tamper_status == "suspected" and changed.integrity_hash == "h" * 64
+    assert store.get_certificate(c1.id).tamper_status == "suspected"
+    assert store.list_certificates(u1.id)[0].tamper_status == "suspected"
+    assert [c.tamper_status for c in store.list_certificates(None) if c.id == c1.id] == ["suspected"]
+    assert store.set_tamper_status(9999, "normal") is None

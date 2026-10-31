@@ -177,3 +177,52 @@ def test_가명_처리와_조회_원본은_저장되지_않는다(app):
     anon = c.post("/api/privacy/process", json={"mode": "anonymous", "name": "홍길동", "birthdate": "1990-04-12"})
     assert anon.get_json() == {"level": "anonymous", "pseudonym_id": None, "display": "익명"}
     assert c.get("/api/dashboard").get_json()["privacy"] == {"processed": True, "level": "anonymous"}
+
+
+def _cert_world(app):
+    person, officer, stranger = app.test_client(), app.test_client(), app.test_client()
+    signup(person, "dyn_cp01"); login(person, "dyn_cp01")
+    signup(officer, "dyn_co01", "institution", "NSR"); login(officer, "dyn_co01")
+    signup(stranger, "dyn_cs01"); login(stranger, "dyn_cs01")
+    aid = person.post("/api/cavp/applications", json={"algorithm_type": "AES"}).get_json()["id"]
+    for st in ("reviewing", "approved"):
+        officer.patch(f"/api/cavp/applications/{aid}/status", json={"status": st})
+    return person, officer, stranger, aid
+
+
+def test_검증서_발급_조회_변조탐지_DynamoDB(app):
+    person, officer, stranger, aid = _cert_world(app)
+    r = officer.post(f"/api/cavp/applications/{aid}/certificate", json={"cert_type": "CAVP", "content": "BODY-v1"})
+    assert r.status_code == 201 and r.get_json()["tamper_status"] == "normal"
+    cid = r.get_json()["id"]
+    assert officer.post(f"/api/cavp/applications/{aid}/certificate", json={"cert_type": "CAVP", "content": "x"}).status_code == 409
+    assert person.get("/api/certificates").get_json()["total"] == 1
+    assert stranger.get("/api/certificates").get_json()["total"] == 0
+    assert stranger.get(f"/api/certificates/{cid}").status_code == 403
+    assert person.get(f"/api/certificates/{cid}/verify").get_json()["tamper_status"] == "normal"
+    table = boto3.resource("dynamodb", region_name=REGION).Table("svc")
+    table.update_item(Key={"pk": f"CERT#{cid}", "sk": "CONTENT"}, UpdateExpression="SET content = :c",
+                      ExpressionAttributeValues={":c": b"TAMPERED"})
+    assert person.get(f"/api/certificates/{cid}/verify").get_json()["tamper_status"] == "suspected"
+    assert person.get("/api/certificates").get_json()["items"][0]["tamper_status"] == "suspected"
+    dash = officer.get("/api/dashboard").get_json()
+    assert dash["certificates"] == {"total": 1, "suspected": 1}
+    table.update_item(Key={"pk": f"CERT#{cid}", "sk": "CONTENT"}, UpdateExpression="SET content = :c",
+                      ExpressionAttributeValues={":c": b"BODY-v1"})
+    assert person.get(f"/api/certificates/{cid}/verify").get_json()["tamper_status"] == "normal"
+    table.delete_item(Key={"pk": f"CERT#{cid}", "sk": "CONTENT"})
+    assert person.get(f"/api/certificates/{cid}/verify").get_json()["tamper_status"] == "suspected"
+
+
+def test_검증서_동시_발급은_한_건만_DynamoDB(app):
+    person, officer, _, aid = _cert_world(app)
+    clients = []
+    for i in range(6):
+        c = app.test_client(); signup(c, f"dyn_cr{i:02d}", "institution", "NSR"); login(c, f"dyn_cr{i:02d}"); clients.append(c)
+    codes = []
+    ts = [threading.Thread(target=lambda c=c: codes.append(
+        c.post(f"/api/cavp/applications/{aid}/certificate", json={"cert_type": "CAVP", "content": "B"}).status_code))
+        for c in clients]
+    [t.start() for t in ts]; [t.join() for t in ts]
+    assert sorted(codes) == [201] + [409] * 5, codes
+    assert person.get("/api/certificates").get_json()["total"] == 1
