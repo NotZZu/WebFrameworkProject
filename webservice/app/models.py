@@ -59,7 +59,7 @@ class CavpApplication(Base):
 class Certificate(Base):
     __tablename__ = "certificates"
     id: Mapped[int] = mapped_column(primary_key=True)
-    application_id: Mapped[int] = mapped_column(ForeignKey("cavp_applications.id"))
+    application_id: Mapped[int] = mapped_column(ForeignKey("cavp_applications.id"), unique=True)  # 신청당 검증서 1건
     cert_type: Mapped[str] = mapped_column(_enum("CAVP", "KCMVP", name="cert_type"))
     issued_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     integrity_hash: Mapped[str] = mapped_column(String(128))

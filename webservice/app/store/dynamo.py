@@ -14,6 +14,9 @@
 | 신청 사본(전체) | ALL                   | APP#<시각>#<id>      | 기관 전체 목록 |
 | 진행 중 잠금    | ACTIVE#<user>#<알고리즘> | -                 | 같은 알고리즘 진행 중 신청 1건 제한(DF-13) |
 | 로그인 시도     | THROTTLE#<아이디>     | -                    | 실패 횟수·만료(DynamoThrottle) |
+| 검증서 본체     | CERT#<id>             | META / CONTENT       | META=기록, CONTENT=원본 내용(바이너리) — 영구 디스크 대신 표에 보관 |
+| 검증서 사본     | USER#<owner> / ALL    | CERT#<시각>#<id>     | 목록용(상태가 바뀌면 함께 갱신) |
+| 발급 잠금       | CERTAPP#<신청id>      | -                    | 신청당 검증서 1건 |
 | 가명·익명 결과  | PI#<user_id>          | -                    | 사용자당 1건(마스킹된 값만, 원본 없음) |
 
 신청의 본체·사본·잠금은 항상 한 트랜잭션으로 함께 바뀐다(쪼개면 목록과 상태가 어긋난다).
@@ -23,7 +26,7 @@ from datetime import datetime, timezone
 from decimal import Decimal
 
 from ..errors import DuplicateApplicationError, DuplicateUsernameError
-from ..models import ActiveSession, CavpApplication, PersonalInfo, User
+from ..models import ActiveSession, CavpApplication, Certificate, PersonalInfo, User
 from .base import Store
 
 SESSION_TTL_SECONDS = 7 * 24 * 3600
@@ -73,6 +76,12 @@ def _pinfo(it) -> PersonalInfo:
     return PersonalInfo(id=_int(it["user_id"]), user_id=_int(it["user_id"]), pseudonym_id=it.get("pseudonym_id"),
                         anonymization_level=it["level"], masked_display_value=it["masked"],
                         created_at=_dt(it["created_at"]))
+
+
+def _cert(it) -> Certificate:
+    return Certificate(id=_int(it["id"]), application_id=_int(it["application_id"]), cert_type=it["cert_type"],
+                       issued_at=_dt(it["issued_at"]), integrity_hash=it["integrity_hash"],
+                       tamper_status=it["tamper_status"])
 
 
 def _reasons(exc) -> list:
@@ -242,9 +251,74 @@ class DynamoStore(Store):
     def all_applications(self, user_id):
         return [_app(i) for i in self._query_apps("ALL" if user_id is None else f"USER#{user_id}")]
 
-    # ---- 검증서: 구현 전(6단계 SC-06 에서 추가). 지금은 저장되는 데이터가 없다. ----
+    # ---- 검증서 ----
+    def create_certificate(self, application_id, cert_type, integrity_hash, content, storage_dir):
+        app = self.get_application(application_id)
+        cid, now = self._next("cert"), _now()
+        list_sk = f"CERT#{_ts(now)}#{cid:012d}"
+        base = {"id": cid, "application_id": application_id, "cert_type": cert_type, "integrity_hash": integrity_hash,
+                "tamper_status": "normal", "issued_at": _ts(now), "owner_id": app.user_id, "list_sk": list_sk}
+        put = lambda item, cond=None: {"Put": dict({"TableName": self.name, "Item": item},
+                                                    **({"ConditionExpression": cond} if cond else {}))}
+        ok, codes = self._transact([
+            put({"pk": f"CERTAPP#{application_id}", "sk": "-", "cert_id": cid}, "attribute_not_exists(pk)"),
+            put(dict(base, pk=f"CERT#{cid}", sk="META")),
+            put({"pk": f"CERT#{cid}", "sk": "CONTENT", "content": bytes(content)}),
+            put(dict(base, pk=f"USER#{app.user_id}", sk=list_sk)),
+            put(dict(base, pk="ALL", sk=list_sk)),
+        ])
+        if not ok:
+            if codes and codes[0] == "ConditionalCheckFailed":
+                raise DuplicateApplicationError("이미 검증서가 발급된 신청입니다.")
+            raise RuntimeError(f"검증서 저장 실패: {codes}")
+        return _cert(base)
+
+    def get_certificate(self, certificate_id):
+        if isinstance(certificate_id, bool) or not isinstance(certificate_id, int):
+            return None
+        it = self._get(f"CERT#{certificate_id}", "META")
+        return _cert(it) if it else None
+
+    def read_certificate_content(self, certificate_id, storage_dir):
+        if isinstance(certificate_id, bool) or not isinstance(certificate_id, int):
+            return None
+        it = self._get(f"CERT#{certificate_id}", "CONTENT")
+        if not it:
+            return None
+        value = it["content"]
+        return bytes(getattr(value, "value", value))  # boto3 는 바이너리를 Binary 객체로 돌려준다
+
+    def set_tamper_status(self, certificate_id, status):
+        for _ in range(_RETRIES):
+            meta = self._get(f"CERT#{certificate_id}", "META") if isinstance(certificate_id, int) else None
+            if not meta:
+                return None
+            owner, list_sk = _int(meta["owner_id"]), meta["list_sk"]
+
+            def update(pk, sk):
+                return {"Update": {"TableName": self.name, "Key": {"pk": pk, "sk": sk},
+                                   "UpdateExpression": "SET tamper_status = :s",
+                                   "ConditionExpression": "attribute_exists(pk)",
+                                   "ExpressionAttributeValues": {":s": status}}}
+            ok, codes = self._transact([update(f"CERT#{certificate_id}", "META"), update(f"USER#{owner}", list_sk),
+                                        update("ALL", list_sk)])
+            if ok:
+                return _cert(dict(meta, tamper_status=status))
+            if "TransactionConflict" not in codes:
+                return None
+        return None
+
     def list_certificates(self, user_id):
-        return []
+        kw = {"KeyConditionExpression": "pk = :p AND begins_with(sk, :c)",
+              "ExpressionAttributeValues": {":p": "ALL" if user_id is None else f"USER#{user_id}", ":c": "CERT#"},
+              "ScanIndexForward": False, "ConsistentRead": True}
+        items = []
+        while True:
+            r = self.table.query(**kw)
+            items.extend(r["Items"])
+            if "LastEvaluatedKey" not in r:
+                return [_cert(i) for i in items]
+            kw["ExclusiveStartKey"] = r["LastEvaluatedKey"]
 
     # ---- 가명·익명 처리 결과 ----
     def get_personal_info(self, user_id):

@@ -111,7 +111,6 @@ def test_session_isolation_and_forged_cookie(make_client, db):
     assert b.get("/api/auth/me").status_code == 401
 
 
-_TODO = pytest.mark.xfail(strict=True, reason="TDD Red: 해당 API 구현 전 (구현하면 이 표시를 지운다)")
 
 
 @case("IT-11", "FR-01", "보호 API: 미로그인 호출", "401 반환, 어떤 레코드도 생성되지 않음", "security")
@@ -122,10 +121,10 @@ _TODO = pytest.mark.xfail(strict=True, reason="TDD Red: 해당 API 구현 전 (�
     ("get", "/api/cavp/applications", None),
     ("get", "/api/cavp/applications/1", None),
     ("patch", "/api/cavp/applications/1/status", {"status": "reviewing"}),
-    pytest.param("post", "/api/cavp/applications/1/certificate", {"cert_type": "CAVP", "content": "x"}, marks=_TODO),
-    pytest.param("get", "/api/certificates", None, marks=_TODO),
-    pytest.param("get", "/api/certificates/1", None, marks=_TODO),
-    pytest.param("get", "/api/certificates/1/verify", None, marks=_TODO),
+    pytest.param("post", "/api/cavp/applications/1/certificate", {"cert_type": "CAVP", "content": "x"}),
+    pytest.param("get", "/api/certificates", None),
+    pytest.param("get", "/api/certificates/1", None),
+    pytest.param("get", "/api/certificates/1/verify", None),
 ])
 def test_protected_endpoints_require_login(client, db, method, url, body):
     r = getattr(client, method)(url, **({"json": body} if body is not None else {}))

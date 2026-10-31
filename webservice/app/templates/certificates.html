@@ -1,0 +1,230 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>{{ "위변조 탐지 결과" if page == "tamper" else "검증서 이력 조회" }} — 자동화 검증시스템</title>
+<style>
+:root{--navy:#1e2761;--accent:#3d5afe;--bg:#f4f6fa;--muted:#6b7488;--line:#dfe3ee;--warn:#d93025;--warnbg:#fdecea}
+*{box-sizing:border-box}
+body{margin:0;font-family:system-ui,-apple-system,"Noto Sans KR","Malgun Gothic",sans-serif;color:var(--navy);background:var(--bg);min-height:100vh;display:grid;grid-template-columns:240px 1fr}
+aside{background:linear-gradient(180deg,#1e2761,#141a47);color:#c9cfee;padding:24px 16px;display:flex;flex-direction:column}
+.logo{display:flex;align-items:center;gap:10px;color:#fff;font-weight:700;margin:0 8px 28px}
+.logo i{width:30px;height:30px;border-radius:8px;background:var(--accent);display:grid;place-items:center;font-style:normal}
+nav a{display:block;padding:11px 12px;border-radius:9px;margin-bottom:4px;font-size:14px;color:#c9cfee;text-decoration:none}
+nav a.on{background:#2b3580;color:#fff;font-weight:700}
+nav a.soon{opacity:.45;cursor:not-allowed}
+.chip{margin-top:auto;display:flex;align-items:center;gap:10px;padding:10px;background:#2b3580;border-radius:10px;color:#fff;font-size:13px}
+.chip b{display:block}.chip small{color:#c9cfee}
+main{padding:32px 40px;max-width:1100px}
+header{display:flex;justify-content:space-between;align-items:center;margin-bottom:24px}
+h1{margin:0;font-size:24px}.sub{color:var(--muted);font-size:14px;margin-top:4px}
+button{font-family:inherit;cursor:pointer}
+
+.logout{background:none;border:1px solid var(--line);color:var(--navy);border-radius:8px;padding:8px 14px;font-size:13px;margin-left:10px}
+.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:24px}
+.kpi{background:#fff;border-radius:14px;padding:20px;box-shadow:0 2px 10px rgba(30,39,97,.06)}
+.kpi span{font-size:13px;color:var(--muted)}.kpi strong{display:block;font-size:32px;margin-top:8px}
+.kpi.danger strong.alert{color:var(--warn)}
+.kpi.danger.hot{background:var(--warnbg)}
+.grid{display:grid;grid-template-columns:2fr 1fr;gap:16px}
+.panel{background:#fff;border-radius:14px;padding:20px;box-shadow:0 2px 10px rgba(30,39,97,.06)}
+.panel h2{margin:0 0 14px;font-size:16px}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th{text-align:left;color:var(--muted);font-weight:600;padding:8px 6px;border-bottom:1px solid var(--line)}
+td{padding:11px 6px;border-bottom:1px solid #eef0f6}
+.badge{padding:3px 10px;border-radius:99px;font-size:12px;font-weight:700}
+.s-submitted{background:#eef0f6;color:#6b7488}.s-reviewing{background:#e3e9ff;color:var(--accent)}
+.s-approved{background:#e6f4ea;color:#137333}.s-rejected{background:var(--warnbg);color:var(--warn)}
+#recent-empty,.empty{color:var(--muted);text-align:center;padding:24px 0;font-size:14px}
+#notifications{list-style:none;margin:0;padding:0}
+#notifications li{padding:10px 12px;border-radius:10px;background:#f4f6fa;margin-bottom:8px;font-size:13px;line-height:1.5}
+#notifications li.warning{background:var(--warnbg);color:var(--warn);font-weight:700}
+@media(max-width:900px){body{grid-template-columns:1fr}aside{display:none}.kpis{grid-template-columns:repeat(2,1fr)}.grid{grid-template-columns:1fr}}
+
+.btn{display:inline-block;background:var(--accent);color:#fff;border:0;border-radius:10px;padding:11px 18px;font-size:14px;font-weight:700;text-decoration:none;cursor:pointer}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+label{display:block;font-size:13px;color:var(--muted);margin-bottom:6px}
+select{width:100%;padding:11px 12px;border:1px solid var(--line);border-radius:10px;font-size:15px;font-family:inherit;color:var(--navy);background:#fff}
+#privacy-msg{min-height:22px;margin:12px 0 0;font-size:14px}
+#privacy-msg.ok{color:#137333}#privacy-msg.err{color:var(--warn)}
+.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+@media(max-width:900px){.form-grid{grid-template-columns:1fr}}
+input[type=text],input[type=date]{width:100%;padding:11px 12px;border:1px solid var(--line);border-radius:10px;font-size:15px;font-family:inherit;color:var(--navy);background:#fff}
+.field{margin-bottom:16px}
+.radios{display:flex;gap:10px}
+.radios label{flex:1;display:flex;gap:8px;align-items:flex-start;border:1px solid var(--line);border-radius:10px;padding:12px;color:var(--navy);font-size:14px;cursor:pointer;margin:0}
+.radios label small{display:block;color:var(--muted);margin-top:2px}
+.notice{background:#eef2ff;border-radius:10px;padding:12px 14px;font-size:13px;line-height:1.6;margin-bottom:16px}
+dl{margin:0}dt{font-size:13px;color:var(--muted);margin-top:14px}dd{margin:4px 0 0;font-size:18px;font-weight:700;word-break:break-all}
+.badge.t-normal{background:#e6f4ea;color:#137333}.badge.t-suspected{background:var(--warnbg);color:var(--warn)}
+tr.item{cursor:pointer}tr.item:hover{background:#f7f8fc}tr.item.sel{background:#eef2ff}tr.item.bad td{background:#fff6f5}
+.kpis3{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:16px}
+.pager{display:flex;gap:10px;align-items:center;justify-content:flex-end;margin-top:12px;font-size:13px;color:var(--muted)}
+.btn.sm{padding:6px 12px;font-size:12px}.btn.ghost{background:#fff;color:var(--accent);border:1px solid var(--accent)}
+textarea{width:100%;min-height:90px;padding:11px 12px;border:1px solid var(--line);border-radius:10px;font-size:14px;font-family:inherit;color:var(--navy);resize:vertical}
+#issue-msg,#tamper-msg{min-height:22px;margin:10px 0 0;font-size:14px}
+#issue-msg.ok,#tamper-msg.ok{color:#137333}#issue-msg.err,#tamper-msg.err{color:var(--warn)}
+.stack{display:grid;gap:16px}
+</style>
+</head>
+<body>
+<aside>
+  <div class="logo"><i>A</i> 자동화 검증시스템</div>
+  <nav>
+    <a href="/dashboard">대시보드</a>
+    <a href="/privacy">가명·익명정보 처리</a>
+    <a href="/cavp/apply">CAVP 시험 신청</a>
+    <a href="/cavp/status">CAVP 진행상태</a>
+    <a {% if page != "tamper" %}class="on" {% endif %}href="/certificates">검증서 이력 조회</a>
+    <a {% if page == "tamper" %}class="on" {% endif %}href="/tamper">위변조 탐지 결과</a>
+  </nav>
+  <div class="chip"><div><b>{{ user.username }}</b><small>{{ {"individual":"개인","company":"기업","institution":"기관"}[user.user_type] }} 사용자</small></div></div>
+</aside>
+<main>
+  <header>
+    <div>
+      <h1>{{ "위변조 탐지 결과" if page == "tamper" else "검증서 이력 조회" }}</h1>
+      <div class="sub">{% if page == "tamper" %}발급 당시의 해시와 현재 내용을 비교해 검증서가 바뀌었는지 확인합니다.{% else %}발급된 검증서의 이력을 확인합니다. 내용과 해시 값은 화면에 표시하지 않습니다.{% endif %}</div>
+    </div>
+    <div><button class="logout" id="logout">로그아웃</button></div>
+  </header>
+{% if page == "tamper" %}
+  <section class="kpis3">
+    <div class="kpi"><span>전체 검증서</span><strong id="kpi-total">–</strong></div>
+    <div class="kpi"><span>정상</span><strong id="kpi-normal">–</strong></div>
+    <div class="kpi danger" id="kpi-bad-box"><span>위변조 의심</span><strong class="alert" id="kpi-suspected">–</strong></div>
+  </section>
+  <section class="panel"><h2>검증서별 위변조 탐지</h2>
+    <p style="margin:0 0 12px"><button class="btn sm" id="verify-all" type="button">현재 페이지 전체 검증</button></p>
+    <table><thead><tr><th>번호</th><th>알고리즘</th><th>유형</th><th>발급일시</th><th>상태</th><th></th></tr></thead><tbody id="tamper-body"></tbody></table>
+    <div class="pager"><button class="btn sm ghost" id="prev" type="button">이전</button><span id="page-info"></span><button class="btn sm ghost" id="next" type="button">다음</button></div>
+    <div id="tamper-msg" role="status" aria-live="polite"></div>
+  </section>
+{% else %}
+  <section class="stack">
+    <div class="panel"><h2>검증서 목록</h2>
+      <table><thead><tr><th>번호</th><th>신청</th><th>알고리즘</th><th>유형</th><th>발급일시</th><th>상태</th></tr></thead><tbody id="certs-body"></tbody></table>
+      <div class="pager"><button class="btn sm ghost" id="prev" type="button">이전</button><span id="page-info"></span><button class="btn sm ghost" id="next" type="button">다음</button></div>
+    </div>
+    <div class="panel" id="cert-detail-panel" hidden><h2>검증서 상세</h2>
+      <dl id="cert-detail"></dl>
+      <p style="margin:14px 0 0"><button class="btn sm" id="verify-one" type="button">무결성 검증</button></p>
+      <div id="detail-msg" role="status" aria-live="polite" style="min-height:22px;margin-top:8px;font-size:14px"></div>
+    </div>
+{% if user.user_type == "institution" %}
+    <div class="panel" id="issue-panel"><h2>검증서 발급 (기관)</h2>
+      <div class="field"><label for="issue-app">승인된 신청</label><select id="issue-app"><option value="">발급할 신청을 선택하세요</option></select></div>
+      <div class="field"><label for="issue-type">검증서 유형</label><select id="issue-type"><option value="CAVP">CAVP</option><option value="KCMVP">KCMVP</option></select></div>
+      <div class="field"><label for="issue-content">검증서 내용</label><textarea id="issue-content" maxlength="20000"></textarea></div>
+      <button class="btn" id="issue-submit" type="button">발급</button>
+      <div id="issue-msg" role="status" aria-live="polite"></div>
+    </div>
+{% endif %}
+  </section>
+{% endif %}
+</main>
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const PAGE = {{ page|tojson }};
+const PER = 10;
+let page = 1, total = 0, items = [], selected = null;
+async function api(url, opt) {
+  const r = await fetch(url, opt);
+  if (r.status === 401) { location.href = "/"; throw new Error("auth"); }
+  return r;
+}
+const badge = c => `<span class="badge t-${esc(c.tamper_status)}">${esc(c.tamper_label)}</span>`;
+function pager() {
+  const pages = Math.max(1, Math.ceil(total / PER));
+  $("page-info").textContent = `${page} / ${pages}`;
+  $("prev").disabled = page <= 1; $("next").disabled = page >= pages;
+}
+async function load() {
+  const d = await (await api(`/api/certificates?page=${page}&per_page=${PER}`)).json();
+  items = d.items; total = d.total; pager();
+  if (PAGE === "tamper") renderTamper(); else renderHistory();
+}
+function renderHistory() {
+  $("certs-body").innerHTML = items.length ? items.map(c =>
+    `<tr class="item${selected === c.id ? " sel" : ""}" data-id="${c.id}"><td>CV-${String(c.id).padStart(4, "0")}</td><td>#${c.application_id}</td>` +
+    `<td>${esc(c.algorithm_type)}</td><td>${esc(c.cert_type)}</td><td>${esc(c.issued_at)}</td><td>${badge(c)}</td></tr>`).join("")
+    : `<tr><td colspan="6" class="empty">발급된 검증서가 없습니다.</td></tr>`;
+  document.querySelectorAll("#certs-body tr.item").forEach(tr => tr.onclick = () => select(Number(tr.dataset.id)));
+}
+function select(id) {
+  selected = id;
+  const c = items.find(x => x.id === id); if (!c) return;
+  $("cert-detail-panel").hidden = false; $("detail-msg").textContent = "";
+  $("cert-detail").innerHTML = `<dt>검증서 번호</dt><dd>CV-${String(c.id).padStart(4, "0")}</dd><dt>시험 신청 / 알고리즘</dt><dd>#${c.application_id} · ${esc(c.algorithm_type)}</dd>` +
+    `<dt>유형</dt><dd>${esc(c.cert_type)}</dd><dt>발급일시</dt><dd>${esc(c.issued_at)}</dd>` + (c.owner ? `<dt>신청자</dt><dd>${esc(c.owner)}</dd>` : "") +
+    `<dt>위변조 상태</dt><dd id="detail-status">${badge(c)}</dd>`;
+  renderHistory();
+}
+function renderTamper() {
+  $("tamper-body").innerHTML = items.length ? items.map(c =>
+    `<tr class="item${c.tamper_status === "suspected" ? " bad" : ""}" data-id="${c.id}"><td>CV-${String(c.id).padStart(4, "0")}</td><td>${esc(c.algorithm_type)}</td><td>${esc(c.cert_type)}</td>` +
+    `<td>${esc(c.issued_at)}</td><td class="st">${badge(c)}</td><td><button class="btn sm ghost verify" type="button" data-id="${c.id}">검증</button></td></tr>`).join("")
+    : `<tr><td colspan="6" class="empty">발급된 검증서가 없습니다.</td></tr>`;
+  document.querySelectorAll("#tamper-body button.verify").forEach(b => b.onclick = e => { e.stopPropagation(); verify(Number(b.dataset.id), true); });
+  summary();
+}
+async function summary() {
+  const d = await (await api("/api/dashboard")).json();
+  const t = d.certificates.total, s = d.certificates.suspected;
+  $("kpi-total").textContent = t; $("kpi-suspected").textContent = s; $("kpi-normal").textContent = t - s;
+  $("kpi-bad-box").classList.toggle("hot", s > 0);
+}
+async function verify(id, quiet) {
+  const r = await api(`/api/certificates/${id}/verify`);
+  const c = await r.json();
+  if (r.status !== 200) { const m = PAGE === "tamper" ? $("tamper-msg") : $("detail-msg"); m.textContent = (c.error && c.error.message) || "검증하지 못했습니다."; m.className = "err"; return null; }
+  const i = items.findIndex(x => x.id === id); if (i >= 0) items[i] = c;
+  if (PAGE === "tamper") { renderTamper(); if (!quiet) return c; $("tamper-msg").className = c.tamper_status === "suspected" ? "err" : "ok";
+    $("tamper-msg").textContent = `CV-${String(id).padStart(4, "0")}: ${c.tamper_label}`; }
+  else { select(id); $("detail-msg").textContent = `검증 결과: ${c.tamper_label}`; $("detail-msg").style.color = c.tamper_status === "suspected" ? "var(--warn)" : "#137333"; }
+  return c;
+}
+$("prev").onclick = () => { page--; load(); };
+$("next").onclick = () => { page++; load(); };
+if (PAGE === "tamper") {
+  $("verify-all").onclick = async () => {
+    $("verify-all").disabled = true; let bad = 0;
+    for (const c of items.slice()) { const r = await verify(c.id, false); if (r && r.tamper_status === "suspected") bad++; }
+    $("tamper-msg").className = bad ? "err" : "ok";
+    $("tamper-msg").textContent = bad ? `검증 완료: 위변조 의심 ${bad}건이 있습니다.` : "검증 완료: 모두 정상입니다.";
+    $("verify-all").disabled = false;
+  };
+} else {
+  $("verify-one").onclick = () => selected && verify(selected, true);
+}
+if ($("issue-submit")) {
+  const say = (t, k) => { $("issue-msg").textContent = t; $("issue-msg").className = k; };
+  async function loadIssuable() {
+    const apps = (await (await api("/api/cavp/applications?status=approved&per_page=50")).json()).items;
+    const have = new Set((await (await api("/api/certificates?per_page=50")).json()).items.map(c => c.application_id));
+    $("issue-app").innerHTML = `<option value="">발급할 신청을 선택하세요</option>` +
+      apps.filter(a => !have.has(a.id)).map(a => `<option value="${a.id}">#${a.id} ${esc(a.algorithm_type)} (${esc(a.owner)})</option>`).join("");
+  }
+  $("issue-submit").onclick = async () => {
+    const id = $("issue-app").value, content = $("issue-content").value;
+    if (!id) return say("발급할 신청을 선택해 주세요.", "err");
+    if (!content.trim()) return say("검증서 내용을 입력해 주세요.", "err");
+    $("issue-submit").disabled = true;
+    try {
+      const r = await api(`/api/cavp/applications/${id}/certificate`, {method: "POST", headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({cert_type: $("issue-type").value, content})});
+      const d = await r.json();
+      if (r.status === 201) { say(`검증서 CV-${String(d.id).padStart(4, "0")} 가 발급되었습니다.`, "ok"); $("issue-content").value = ""; page = 1; await load(); await loadIssuable(); }
+      else if (r.status === 409) say("이미 발급되었거나 승인되지 않은 신청입니다.", "err");
+      else say((d.error && d.error.message) || "발급하지 못했습니다.", "err");
+    } catch (e) { if (e.message !== "auth") say("네트워크 오류가 발생했습니다.", "err"); }
+    finally { $("issue-submit").disabled = false; }
+  };
+  loadIssuable();
+}
+$("logout").onclick = async () => { await fetch("/api/auth/logout", {method: "POST"}); location.href = "/"; };
+load();
+</script>
+</body>
+</html>

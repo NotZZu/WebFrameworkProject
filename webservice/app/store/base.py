@@ -59,6 +59,23 @@ class Store:
         """user_id 가 None 이면 전체, 아니면 그 사용자의 신청에 속한 검증서."""
         raise NotImplementedError
 
+    def create_certificate(self, application_id, cert_type, integrity_hash, content, storage_dir):
+        """검증서 기록과 원본 내용을 함께 저장한다. 신청당 1건: 이미 있으면 DuplicateApplicationError.
+        SQL 구현은 내용을 storage_dir/cert_<id>.bin 파일로, DynamoDB 구현은 같은 표의 항목으로 둔다(Lambda 에는 영구 디스크가 없다)."""
+        raise NotImplementedError
+
+    def get_certificate(self, certificate_id):
+        """없으면 None."""
+        raise NotImplementedError
+
+    def read_certificate_content(self, certificate_id, storage_dir):
+        """저장된 원본 내용. 없으면(파일 삭제·항목 누락) None."""
+        raise NotImplementedError
+
+    def set_tamper_status(self, certificate_id, status):
+        """tamper_status 만 바꾸고(integrity_hash 는 그대로) 갱신된 검증서를 돌려준다. 없으면 None."""
+        raise NotImplementedError
+
     def get_personal_info(self, user_id):
         """없으면 None."""
         raise NotImplementedError
