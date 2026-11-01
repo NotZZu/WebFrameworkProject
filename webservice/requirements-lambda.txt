@@ -1,4 +1,4 @@
 # Lambda(python3.12, x86_64) 배포용. boto3 는 Lambda 에 이미 들어 있으므로 넣지 않는다.
 Flask>=3.0
-SQLAlchemy>=2.0
+SQLAlchemy>=2.1.6
 bcrypt>=4.1
