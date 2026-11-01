@@ -226,3 +226,21 @@ def test_검증서_동시_발급은_한_건만_DynamoDB(app):
     [t.start() for t in ts]; [t.join() for t in ts]
     assert sorted(codes) == [201] + [409] * 5, codes
     assert person.get("/api/certificates").get_json()["total"] == 1
+
+
+def test_시드_적재_후_데모_계정으로_로그인과_위변조_탐지_DynamoDB(app):
+    from app.seed import seed
+    store = app.store_factory()
+    first = seed(store, None)
+    assert seed(store, None) == first == {"users": 3, "personal_info": 2, "applications": 6, "certificates": 3}
+    store.close()
+    officer, person = app.test_client(), app.test_client()
+    assert login(officer, "demo_institution", "Demo1234").status_code == 200
+    assert login(person, "demo_individual", "Demo1234").status_code == 200
+    assert person.get("/api/cavp/applications").get_json()["total"] == 3
+    certs = officer.get("/api/certificates?per_page=50").get_json()
+    assert certs["total"] == 3
+    assert sum(c["tamper_status"] == "suspected" for c in certs["items"]) == 1
+    # 다시 검증해도 변조된 1건은 의심으로 남고 나머지는 정상이다(저장된 내용과 해시가 실제로 다르다).
+    states = [officer.get(f"/api/certificates/{c['id']}/verify").get_json()["tamper_status"] for c in certs["items"]]
+    assert sorted(states) == ["normal", "normal", "suspected"]
