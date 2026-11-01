@@ -60,7 +60,21 @@ def build_environ(event):
     return environ
 
 
+def _run_seed():
+    from app.seed import seed
+    app = _get_app()
+    store = app.store_factory()
+    try:
+        return seed(store, app.config.get("CERT_STORAGE_DIR"))
+    finally:
+        store.close()
+
+
 def handler(event, context=None):
+    # 시연용 초기 데이터 적재: 'requestContext' 가 없는 직접 호출(Invoke, IAM 권한 필요)만 받는다.
+    # 함수 URL 로 들어온 요청은 항상 requestContext 를 가지므로 웹에서는 이 분기에 닿을 수 없다.
+    if isinstance(event, dict) and event.get("action") == "seed" and "requestContext" not in event:
+        return {"seeded": _run_seed()}
     secret = os.environ.get("ORIGIN_VERIFY", "")
     if secret:
         given = (event.get("headers") or {}).get("x-origin-verify", "")

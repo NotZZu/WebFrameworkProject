@@ -114,3 +114,20 @@ def test_설정_오류는_상세를_숨기고_500(env):
     env.delenv("SECRET_KEY")
     r = lh.handler(event("GET", "/healthz"))
     assert r["statusCode"] == 500 and "SECRET_KEY" not in r["body"]
+
+
+def test_직접_호출로_시드를_넣고_웹_요청으로는_넣을_수_없다(env):
+    web = event("POST", "/api/auth/login", {"username": "demo_institution", "password": "Demo1234"})
+    assert lh.handler(web)["statusCode"] == 401  # 시드 전
+    forged = dict(web, action="seed")  # 함수 URL 이벤트에 action 을 끼워 넣어도 시드 분기로 가지 않는다
+    assert lh.handler(forged)["statusCode"] == 401
+    res = lh.handler({"action": "seed"})
+    assert res == {"seeded": {"users": 3, "personal_info": 2, "applications": 6, "certificates": 3}}
+    assert lh.handler({"action": "seed"}) == res  # 멱등
+    assert lh.handler(web)["statusCode"] == 200
+
+
+def test_원본_확인_헤더가_있어도_직접_호출_시드는_IAM_권한으로_보호된다(env):
+    env.setenv("ORIGIN_VERIFY", "s3cret-value")
+    assert lh.handler({"action": "seed"})["seeded"]["users"] == 3
+    assert lh.handler(event("GET", "/healthz"))["statusCode"] == 403
