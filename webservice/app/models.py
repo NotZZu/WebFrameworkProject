@@ -49,7 +49,7 @@ class CavpApplication(Base):
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
     algorithm_type: Mapped[str] = mapped_column(String(50))
     status: Mapped[str] = mapped_column(
-        _enum("submitted", "reviewing", "approved", "rejected", name="app_status"),
+        _enum("submitted", "reviewing", "approved", "rejected", "cancelled", name="app_status"),
         default="submitted",
     )
     submitted_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)

@@ -109,6 +109,21 @@ def test_시험_신청_심사_대시보드_흐름(app):
     assert d["privacy"] == {"processed": False, "level": None}
 
 
+def test_신청_취소와_재신청_흐름(app):
+    c, inst = app.test_client(), app.test_client()
+    signup(c, "dyn_cancel01"); login(c, "dyn_cancel01")
+    signup(inst, "dyn_officer09", "institution", "ORG-9"); login(inst, "dyn_officer09")
+    app_id = c.post("/api/cavp/applications", json={"algorithm_type": "AES"}).get_json()["id"]
+    assert inst.post(f"/api/cavp/applications/{app_id}/cancel").status_code == 403
+    r = c.post(f"/api/cavp/applications/{app_id}/cancel")
+    assert r.status_code == 200 and r.get_json()["status"] == "cancelled"
+    assert c.post(f"/api/cavp/applications/{app_id}/cancel").status_code == 409
+    assert c.get("/api/cavp/applications?status=cancelled").get_json()["total"] == 1
+    assert inst.get("/api/cavp/applications?status=cancelled").get_json()["total"] == 1
+    assert c.post("/api/cavp/applications", json={"algorithm_type": "AES"}).status_code == 201
+    assert c.get("/api/dashboard").get_json()["applications"]["by_status"]["cancelled"] == 1
+
+
 def test_다른_사용자의_신청은_볼_수_없다(app):
     a, b = app.test_client(), app.test_client()
     signup(a, "dyn_user06"); login(a, "dyn_user06")

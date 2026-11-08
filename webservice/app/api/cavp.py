@@ -64,6 +64,13 @@ def detail(app_id):
     return jsonify(application_json(app, _owners([app]).get(app.user_id)))
 
 
+@bp.post("/applications/<int:app_id>/cancel")
+def cancel(app_id):
+    user = current_user()
+    app = cavp_service.cancel_application(db(), user.id, app_id)
+    return jsonify(application_json(app, user.username))
+
+
 @bp.patch("/applications/<int:app_id>/status")
 def change_status(app_id):
     user = current_user()

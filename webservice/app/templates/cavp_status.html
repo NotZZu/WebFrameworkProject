@@ -34,7 +34,7 @@ th{text-align:left;color:var(--muted);font-weight:600;padding:8px 6px;border-bot
 td{padding:11px 6px;border-bottom:1px solid #eef0f6}
 .badge{padding:3px 10px;border-radius:99px;font-size:12px;font-weight:700}
 .s-submitted{background:#eef0f6;color:#6b7488}.s-reviewing{background:#e3e9ff;color:var(--accent)}
-.s-approved{background:#e6f4ea;color:#137333}.s-rejected{background:var(--warnbg);color:var(--warn)}
+.s-approved{background:#e6f4ea;color:#137333}.s-rejected{background:var(--warnbg);color:var(--warn)}.s-cancelled{background:#e4e4e7;color:#52525b;text-decoration:line-through}
 #recent-empty,.empty{color:var(--muted);text-align:center;padding:24px 0;font-size:14px}
 #notifications{list-style:none;margin:0;padding:0}
 #notifications li{padding:10px 12px;border-radius:10px;background:#f4f6fa;margin-bottom:8px;font-size:13px;line-height:1.5}
@@ -97,7 +97,7 @@ dl{display:grid;grid-template-columns:90px 1fr;gap:8px 12px;margin:0;font-size:1
         <label for="status-filter" style="margin:0">상태</label>
         <select id="status-filter">
           <option value="">전체</option><option value="submitted">접수 대기</option><option value="reviewing">시험 진행중</option>
-          <option value="approved">시험 완료</option><option value="rejected">반려</option>
+          <option value="approved">시험 완료</option><option value="rejected">반려</option><option value="cancelled">취소</option>
         </select>
         <span class="count" id="total-count"></span>
       </div>
@@ -116,6 +116,15 @@ dl{display:grid;grid-template-columns:90px 1fr;gap:8px 12px;margin:0;font-size:1
           <button class="btn" id="act-review" type="button" hidden>심사 시작</button>
           <button class="btn" id="act-approve" type="button" hidden>승인</button>
           <button class="btn danger" id="act-reject" type="button" hidden>반려</button>
+        </div>
+{% else %}
+        <div class="actions">
+          <button class="btn danger" id="act-cancel" type="button" hidden>신청 취소</button>
+        </div>
+        <div class="actions" id="cancel-confirm" hidden>
+          <span style="align-self:center;font-size:14px">이 신청을 취소할까요? 취소한 신청은 되돌릴 수 없습니다.</span>
+          <button class="btn danger" id="act-cancel-yes" type="button">취소 확정</button>
+          <button class="btn" id="act-cancel-no" type="button">돌아가기</button>
         </div>
 {% endif %}
         <div id="detail-msg" role="status" aria-live="polite" style="min-height:20px;margin-top:10px;font-size:14px"></div>
@@ -153,11 +162,12 @@ async function loadList() {
 function showDetail(a) {
   selected = a.id;
   $("detail-empty").hidden = true; $("detail-body").hidden = false;
-  const idx = {submitted: 0, reviewing: 1, approved: 2, rejected: 2}[a.status];
+  const cancelled = a.status === "cancelled";
+  const idx = {submitted: 0, reviewing: 1, approved: 2, rejected: 2, cancelled: 1}[a.status];
   const last = a.status === "rejected" ? "반려" : "승인 완료";
-  const names = ["접수", "심사", last];
+  const names = cancelled ? ["접수", "취소"] : ["접수", "심사", last];
   $("steps").innerHTML = names.map((n, i) =>
-    `<div class="step ${i < idx ? "done" : ""} ${i === idx ? "now" : ""} ${i === idx && a.status === "rejected" ? "bad" : ""}">${i + 1}. ${n}</div>`).join("");
+    `<div class="step ${i < idx ? "done" : ""} ${i === idx ? "now" : ""} ${i === idx && (a.status === "rejected" || cancelled) ? "bad" : ""}">${i + 1}. ${n}</div>`).join("");
   $("d-id").textContent = "#" + a.id; $("d-algo").textContent = a.algorithm_type;
   $("detail-status").textContent = a.status_label;
   $("d-owner-t").hidden = $("d-owner").hidden = !isAll; $("d-owner").textContent = a.owner || "";
@@ -165,6 +175,7 @@ function showDetail(a) {
   const set = (id, show) => { const b = $(id); if (b) b.hidden = !show; };
   set("act-review", a.status === "submitted");
   set("act-approve", a.status === "reviewing"); set("act-reject", a.status === "reviewing");
+  set("act-cancel", a.status === "submitted"); set("cancel-confirm", false);
   document.querySelectorAll("#apps-body tr.item").forEach(r => r.classList.toggle("sel", Number(r.dataset.id) === a.id));
 }
 async function select(id) {
@@ -178,12 +189,27 @@ async function change(status) {
   if (r.ok) { msg.style.color = "#137333"; msg.textContent = "상태를 변경했습니다."; showDetail(d); await loadList(); }
   else { msg.style.color = "#d93025"; msg.textContent = (d.error && d.error.message) || "변경하지 못했습니다."; await select(selected); }
 }
+async function cancelApp() {
+  const msg = $("detail-msg");
+  const r = await api(`/api/cavp/applications/${selected}/cancel`, {method: "POST"});
+  const d = await r.json();
+  if (r.ok) { msg.style.color = "#137333"; msg.textContent = "신청을 취소했습니다."; showDetail(d); await loadList(); }
+  else {
+    await select(selected); await loadList();  // 최신 상태를 먼저 불러온 뒤(불러오면 안내문이 지워진다) 오류를 보여 준다
+    msg.style.color = "#d93025"; msg.textContent = (d.error && d.error.message) || "취소하지 못했습니다.";
+  }
+}
 $("apps-body").onclick = e => { const tr = e.target.closest("tr.item"); if (tr) select(Number(tr.dataset.id)); };
 $("status-filter").onchange = () => { page = 1; loadList(); };
 $("prev").onclick = () => { page--; loadList(); };
 $("next").onclick = () => { page++; loadList(); };
 for (const [id, st] of [["act-review", "reviewing"], ["act-approve", "approved"], ["act-reject", "rejected"]]) {
   const b = $(id); if (b) b.onclick = () => change(st);
+}
+if ($("act-cancel")) {
+  $("act-cancel").onclick = () => { $("act-cancel").hidden = true; $("cancel-confirm").hidden = false; };
+  $("act-cancel-no").onclick = () => { $("cancel-confirm").hidden = true; $("act-cancel").hidden = false; };
+  $("act-cancel-yes").onclick = cancelApp;
 }
 $("logout").onclick = async () => { await fetch("/api/auth/logout", {method: "POST"}); location.href = "/"; };
 loadList();

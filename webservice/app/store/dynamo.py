@@ -218,7 +218,7 @@ class DynamoStore(Store):
                                    "ExpressionAttributeNames": {"#s": "status"},
                                    "ExpressionAttributeValues": {":new": new_status, ":now": now, ":exp": expected_status}}}
             items = [update(f"APP#{application_id}", "META"), update(f"USER#{uid}", list_sk), update("ALL", list_sk)]
-            if new_status in ("approved", "rejected"):  # 끝난 신청은 진행 중 잠금을 푼다
+            if new_status in ("approved", "rejected", "cancelled"):  # 끝났거나 취소된 신청은 진행 중 잠금을 푼다
                 items.append({"Delete": {"TableName": self.name, "Key": {"pk": f"ACTIVE#{uid}#{algo}", "sk": "-"}}})
             ok, codes = self._transact(items)
             if ok:
