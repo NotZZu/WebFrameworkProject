@@ -47,19 +47,19 @@ def test_counts_own_only(session, me):
     assert s["applications"]["by_status"]["approved"] == 1 and s["applications"]["by_status"]["rejected"] == 0
 
 
-@case("UT-DASH-02", "FR-03", "get_summary: 진행 중 = 접수 대기 + 심사 중, by_status 는 4개 키 항상 존재", "in_progress 합산, 0건 상태도 0 으로 표기")
+@case("UT-DASH-02", "FR-03", "get_summary: 진행 중 = 접수 대기 + 심사 중, by_status 는 5개 키 항상 존재", "in_progress 합산, 0건 상태도 0 으로 표기")
 def test_in_progress_and_all_status_keys(session, me):
     app_at(session, me, "AES", "submitted"); app_at(session, me, "RSA", "reviewing"); app_at(session, me, "HMAC", "reviewing")
     a = dash.get_summary(session, me.id, NOW)["applications"]
     assert a["in_progress"] == 3
-    assert a["by_status"] == {"submitted": 1, "reviewing": 2, "approved": 0, "rejected": 0}
+    assert a["by_status"] == {"submitted": 1, "reviewing": 2, "approved": 0, "rejected": 0, "cancelled": 0}
 
 
 @case("UT-DASH-03", "FR-03", "get_summary: 데이터가 전혀 없는 신규 사용자", "모든 수치 0, 목록·알림 빈 배열, 가명처리 미처리", "boundary")
 def test_empty_user(session, me):
     s = dash.get_summary(session, me.id, NOW)
     assert s["applications"] == {"total": 0, "in_progress": 0, "new_last_7d": 0,
-                                 "by_status": {"submitted": 0, "reviewing": 0, "approved": 0, "rejected": 0}}
+                                 "by_status": {"submitted": 0, "reviewing": 0, "approved": 0, "rejected": 0, "cancelled": 0}}
     assert s["certificates"] == {"total": 0, "suspected": 0}
     assert s["recent_applications"] == [] and s["notifications"] == []
     assert s["privacy"] == {"processed": False, "level": None}
@@ -175,3 +175,13 @@ def test_other_users_not_leaked(session, me):
     s = dash.get_summary(session, me.id, NOW)
     text = str(s["recent_applications"]) + str(s["notifications"])
     assert "ECDSA" not in text and "DRBG" not in text and s["notifications"] == []
+
+
+@case("UT-DASH-17", "FR-03", "get_summary: 취소된 신청", "total 과 by_status.cancelled 에는 포함, 진행 중·알림에서는 제외", "boundary")
+def test_cancelled_counted_but_not_in_progress(session, me):
+    app_at(session, me, "AES", "cancelled"); app_at(session, me, "RSA", "submitted")
+    s = dash.get_summary(session, me.id, NOW)
+    a = s["applications"]
+    assert a["total"] == 2 and a["by_status"]["cancelled"] == 1 and a["in_progress"] == 1
+    assert s["notifications"] == []
+    assert {r["status_label"] for r in s["recent_applications"]} == {"접수 대기", "취소"}

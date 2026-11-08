@@ -4,6 +4,7 @@
 - 동일 사용자·동일 알고리즘의 진행 중(submitted/reviewing) 신청이 있으면 DuplicateApplicationError.
   (approved/rejected 이후에는 재신청 허용)
 - 상태 전이: submitted→reviewing→(approved|rejected). 그 외 InvalidTransitionError.
+- 취소: 신청 본인만, 접수 대기(submitted)일 때만 cancelled 로 바꾼다(cancel_application). 기관의 상태 변경으로는 취소할 수 없다.
 - 상태 변경은 institution 유형 사용자만 가능(PermissionDeniedError).
 - 조회는 본인 신청만. 타인 신청 상세는 PermissionDeniedError (institution 은 전체 조회 가능).
 - 목록: 최신순(submitted_at desc, id desc), page>=1, per_page 1~50, status 필터 선택.
@@ -17,12 +18,13 @@ from ..store import as_store
 from .dashboard_service import STATUS_LABELS
 
 ALGORITHMS = ("AES", "SHA-2", "SHA-3", "HMAC", "RSA", "ECDSA", "DRBG")
-STATUSES = ("submitted", "reviewing", "approved", "rejected")
+STATUSES = ("submitted", "reviewing", "approved", "rejected", "cancelled")
 TRANSITIONS = {
     "submitted": {"reviewing"},
     "reviewing": {"approved", "rejected"},
     "approved": set(),
     "rejected": set(),
+    "cancelled": set(),
 }
 
 
@@ -57,6 +59,23 @@ def update_status(session, actor_id: int, application_id: int, new_status: str):
         raise InvalidTransitionError(f"'{STATUS_LABELS[app.status]}' 상태에서는 '{STATUS_LABELS[new_status]}'(으)로 변경할 수 없습니다.")
     # 읽은 뒤 다른 요청이 먼저 바꿨을 수 있으므로, '내가 읽은 상태일 때만' 바꾸는 한 번의 동작으로 처리한다(DF-14).
     if not store.change_application_status(application_id, app.status, new_status):
+        raise InvalidTransitionError("다른 요청이 먼저 상태를 변경했습니다. 목록을 새로 고친 뒤 다시 시도해 주세요.")
+    return store.get_application(application_id)
+
+
+def cancel_application(session, user_id: int, application_id: int):
+    store = as_store(session)
+    if store.get_user(user_id) is None:
+        raise NotFoundError("사용자를 찾을 수 없습니다.")
+    app = store.get_application(application_id)
+    if app is None:
+        raise NotFoundError("신청을 찾을 수 없습니다.")
+    if app.user_id != user_id:
+        raise PermissionDeniedError("본인의 신청만 취소할 수 있습니다.")
+    if app.status != "submitted":
+        raise InvalidTransitionError(f"'{STATUS_LABELS[app.status]}' 상태의 신청은 취소할 수 없습니다.")
+    # 심사가 먼저 시작됐을 수 있으므로 '접수 대기일 때만' 바꾸는 한 번의 동작으로 처리한다(DF-14와 같은 방식).
+    if not store.change_application_status(application_id, "submitted", "cancelled"):
         raise InvalidTransitionError("다른 요청이 먼저 상태를 변경했습니다. 목록을 새로 고친 뒤 다시 시도해 주세요.")
     return store.get_application(application_id)
 

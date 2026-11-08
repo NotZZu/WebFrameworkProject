@@ -299,3 +299,33 @@ def test_검증서_목록은_사용자별_전체별이고_상태변경이_목록
     assert store.list_certificates(u1.id)[0].tamper_status == "suspected"
     assert [c.tamper_status for c in store.list_certificates(None) if c.id == c1.id] == ["suspected"]
     assert store.set_tamper_status(9999, "normal") is None
+
+
+def test_취소하면_진행_중_잠금이_풀려_같은_알고리즘을_다시_신청할_수_있다(store):
+    u = _user(store)
+    a = store.create_application(u.id, "AES")
+    assert store.change_application_status(a.id, "submitted", "cancelled") is True
+    assert store.get_application(a.id).status == "cancelled"
+    assert store.change_application_status(a.id, "submitted", "reviewing") is False  # 취소 건은 되살릴 수 없다
+    b = store.create_application(u.id, "AES")
+    assert b.id != a.id
+    with pytest.raises(DuplicateApplicationError):
+        store.create_application(u.id, "AES")
+    items, total = store.list_applications(u.id, "cancelled", 1, 10)
+    assert total == 1 and items[0].id == a.id
+
+
+def test_취소와_심사_시작_동시_요청은_한_요청만_성공한다(new_store):
+    s0 = new_store(); u = _user(s0); a = s0.create_application(u.id, "AES"); s0.close()
+    results, targets = [], ["cancelled", "reviewing"] * 6
+
+    def run(target):
+        s = new_store()
+        results.append(s.change_application_status(a.id, "submitted", target))
+        s.close()
+    ts = [threading.Thread(target=run, args=(t,)) for t in targets]
+    [t.start() for t in ts]; [t.join() for t in ts]
+    assert results.count(True) == 1
+    s1 = new_store()
+    assert s1.get_application(a.id).status in ("cancelled", "reviewing")
+    s1.close()

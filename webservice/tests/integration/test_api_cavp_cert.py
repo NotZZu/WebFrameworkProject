@@ -100,6 +100,75 @@ def test_status_change_forbidden(login_as, db):
     assert db.get(CavpApplication, app_id).status == "submitted"
 
 
+# ---------------- 신청 취소 ----------------
+def cancel(c, app_id):
+    return c.post(f"/api/cavp/applications/{app_id}/cancel")
+
+
+@case("IT-46", "FR-03", "POST /api/cavp/applications/{id}/cancel: 본인 접수 대기 취소", "200 status=cancelled·status_label=취소, 목록 필터와 상세에 반영, 같은 알고리즘 재신청 201")
+def test_cancel_flow(login_as, db):
+    c, _ = login_as()
+    app_id = apply(c, "AES").get_json()["id"]
+    r = cancel(c, app_id)
+    assert r.status_code == 200 and r.get_json()["status"] == "cancelled" and r.get_json()["status_label"] == "취소"
+    assert c.get(f"/api/cavp/applications/{app_id}").get_json()["status"] == "cancelled"
+    assert c.get("/api/cavp/applications?status=cancelled").get_json()["total"] == 1
+    assert apply(c, "AES").status_code == 201
+    db.expire_all()
+    assert db.get(CavpApplication, app_id).status == "cancelled"
+
+
+@case("IT-47", "FR-03", "취소 불가 상태·없는 신청", "심사 시작 후 409 INVALID_TRANSITION, 이미 취소 409, 없는 id 404, 상태 불변", "negative")
+def test_cancel_errors(login_as, db):
+    person, _ = login_as(username="person01")
+    officer, _ = login_as("institution", "officer01")
+    app_id = apply(person).get_json()["id"]
+    officer.patch(f"/api/cavp/applications/{app_id}/status", json={"status": "reviewing"})
+    r = cancel(person, app_id)
+    assert r.status_code == 409 and r.get_json()["error"]["code"] == "INVALID_TRANSITION"
+    other = apply(person, "RSA").get_json()["id"]
+    assert cancel(person, other).status_code == 200
+    assert cancel(person, other).status_code == 409
+    assert cancel(person, 99999).status_code == 404
+    db.expire_all()
+    assert db.get(CavpApplication, app_id).status == "reviewing"
+
+
+@case("IT-48", "FR-03", "취소 권한: 타인·기관·비로그인", "타인과 기관 403 FORBIDDEN, 비로그인 401, 상태 불변", "security")
+def test_cancel_permission(login_as, make_client, db):
+    owner, _ = login_as(username="person01")
+    stranger, _ = login_as(username="person02")
+    officer, _ = login_as("institution", "officer01")
+    app_id = apply(owner).get_json()["id"]
+    for c in (stranger, officer):
+        r = cancel(c, app_id)
+        assert r.status_code == 403 and r.get_json()["error"]["code"] == "FORBIDDEN"
+    assert cancel(make_client(), app_id).status_code == 401
+    db.expire_all()
+    assert db.get(CavpApplication, app_id).status == "submitted"
+
+
+@case("IT-49", "FR-03", "PATCH status 로 취소 시도", "기관이 status=cancelled 로 바꾸려 하면 409 INVALID_TRANSITION, 상태 불변", "security")
+def test_patch_cannot_cancel(login_as, db):
+    person, _ = login_as(username="person01")
+    officer, _ = login_as("institution", "officer01")
+    app_id = apply(person).get_json()["id"]
+    r = officer.patch(f"/api/cavp/applications/{app_id}/status", json={"status": "cancelled"})
+    assert r.status_code == 409 and r.get_json()["error"]["code"] == "INVALID_TRANSITION"
+    db.expire_all()
+    assert db.get(CavpApplication, app_id).status == "submitted"
+
+
+@case("IT-50", "FR-03", "대시보드의 취소 집계", "by_status.cancelled 증가, in_progress 감소", "boundary")
+def test_dashboard_counts_cancelled(login_as):
+    c, _ = login_as()
+    a = apply(c, "AES").get_json()["id"]; apply(c, "RSA")
+    assert c.get("/api/dashboard").get_json()["applications"]["in_progress"] == 2
+    cancel(c, a)
+    d = c.get("/api/dashboard").get_json()["applications"]
+    assert d["in_progress"] == 1 and d["by_status"]["cancelled"] == 1 and d["total"] == 2
+
+
 # ---------------- Certificates ----------------
 def approved_application_via_api(person, officer):
     app_id = apply(person).get_json()["id"]

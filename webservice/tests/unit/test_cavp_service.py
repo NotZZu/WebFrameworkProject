@@ -196,3 +196,71 @@ def test_get_application_access(session, person):
 def test_get_application_institution_can_view_all(session, person, officer):
     a = factories.make_application(session, person, "AES")
     assert cavp.get_application(session, officer.id, a.id).id == a.id
+
+
+# ---------- cancel (신청 취소) ----------
+@case("UT-CAVP-21", "FR-03", "cancel_application: 본인의 접수 대기 신청 취소", "status='cancelled', updated_at 갱신, 레코드 유지")
+def test_cancel_own_submitted(session, person):
+    a = factories.make_application(session, person, "AES", "submitted")
+    before = a.updated_at
+    got = cavp.cancel_application(session, person.id, a.id)
+    assert got.status == "cancelled" and got.updated_at >= before
+    assert session.get(CavpApplication, a.id).status == "cancelled" and n_apps(session) == 1
+
+
+@case("UT-CAVP-22", "FR-03", "cancel_application: 취소 뒤 같은 알고리즘 재신청", "진행 중 잠금이 풀려 재신청 허용, 취소 건은 그대로", "boundary")
+def test_reapply_after_cancel(session, person):
+    a = cavp.create_application(session, person.id, "AES")
+    cavp.cancel_application(session, person.id, a.id)
+    b = cavp.create_application(session, person.id, "AES")
+    assert b.id != a.id and b.status == "submitted"
+    assert session.get(CavpApplication, a.id).status == "cancelled"
+    with pytest.raises(DuplicateApplicationError):
+        cavp.create_application(session, person.id, "AES")
+
+
+@case("UT-CAVP-23", "FR-03", "cancel_application: 접수 대기가 아닌 상태는 취소 불가", "reviewing/approved/rejected/cancelled → InvalidTransitionError, 상태 불변", "negative")
+@pytest.mark.parametrize("status", ["reviewing", "approved", "rejected", "cancelled"])
+def test_cancel_not_submitted(session, person, status):
+    a = factories.make_application(session, person, "AES", status)
+    with pytest.raises(InvalidTransitionError):
+        cavp.cancel_application(session, person.id, a.id)
+    assert session.get(CavpApplication, a.id).status == status
+
+
+@case("UT-CAVP-24", "FR-03", "cancel_application: 타인 신청은 취소 불가(기관 포함)", "PermissionDeniedError, 상태 불변", "security")
+def test_cancel_other_users_application(session, person, officer):
+    other = factories.make_user(session, "person02")
+    a = factories.make_application(session, person, "AES", "submitted")
+    for actor in (other, officer):
+        with pytest.raises(PermissionDeniedError):
+            cavp.cancel_application(session, actor.id, a.id)
+    assert session.get(CavpApplication, a.id).status == "submitted"
+
+
+@case("UT-CAVP-25", "FR-03", "cancel_application: 없는 신청/없는 사용자/잘못된 id", "NotFoundError", "negative")
+@pytest.mark.parametrize("bad", [99999, 0, -1, 2 ** 63, None])
+def test_cancel_not_found(session, person, bad):
+    with pytest.raises(NotFoundError):
+        cavp.cancel_application(session, person.id, bad)
+    a = factories.make_application(session, person, "AES", "submitted")
+    with pytest.raises(NotFoundError):
+        cavp.cancel_application(session, 99999, a.id)
+    assert session.get(CavpApplication, a.id).status == "submitted"
+
+
+@case("UT-CAVP-26", "FR-03", "update_status: 기관은 상태 변경으로 취소할 수 없음", "submitted→cancelled 는 InvalidTransitionError, 상태 불변", "security")
+def test_institution_cannot_cancel_via_status(session, person, officer):
+    a = factories.make_application(session, person, "AES", "submitted")
+    with pytest.raises(InvalidTransitionError):
+        cavp.update_status(session, officer.id, a.id, "cancelled")
+    assert session.get(CavpApplication, a.id).status == "submitted"
+
+
+@case("UT-CAVP-27", "FR-03", "list_applications: 취소 상태 필터", "status='cancelled' 만 반환, 다른 상태에는 섞이지 않음")
+def test_list_filter_cancelled(session, person):
+    factories.make_application(session, person, "AES", "cancelled")
+    factories.make_application(session, person, "RSA", "submitted")
+    got = cavp.list_applications(session, person.id, status="cancelled")
+    assert got["total"] == 1 and got["items"][0].status == "cancelled"
+    assert cavp.list_applications(session, person.id, status="submitted")["total"] == 1
