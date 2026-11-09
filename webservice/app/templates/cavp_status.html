@@ -187,7 +187,10 @@ async function change(status) {
   const r = await api(`/api/cavp/applications/${selected}/status`, {method: "PATCH", headers: {"Content-Type": "application/json"}, body: JSON.stringify({status})});
   const d = await r.json();
   if (r.ok) { msg.style.color = "#137333"; msg.textContent = "상태를 변경했습니다."; showDetail(d); await loadList(); }
-  else { msg.style.color = "#d93025"; msg.textContent = (d.error && d.error.message) || "변경하지 못했습니다."; await select(selected); }
+  else {
+    await select(selected); await loadList();  // 최신 상태를 먼저 불러온 뒤(불러오면 안내문이 지워진다) 오류를 보여 준다
+    msg.style.color = "#d93025"; msg.textContent = (d.error && d.error.message) || "변경하지 못했습니다.";
+  }
 }
 async function cancelApp() {
   const msg = $("detail-msg");

@@ -160,3 +160,26 @@ def test_empty_and_auth(srv, browser_page):
     browser_page.goto(base + "/cavp/status")
     browser_page.wait_for_selector("#apps-body .empty")
     assert "아직 신청 내역이 없습니다" in browser_page.inner_text("#apps-body")
+
+
+@case("ST-05-N6", "FR-03", "브라우저 E2E: 심사 시작 직전에 다른 요청이 상태를 먼저 바꾼 경우",
+      "오류 안내가 화면에 남고(지워지지 않음), 상세와 목록 배지가 최신 상태 '시험 완료'로 갱신", "negative")
+def test_status_error_message_stays(srv, browser_page):
+    app, base = srv
+    s = app.session_factory()
+    person = factories.make_user(s, username="st5_p3")
+    factories.make_user(s, username="st5_o3", user_type="institution")
+    a = factories.make_application(s, person, "ECDSA", "submitted"); app_id = a.id; s.close()
+    login(browser_page, base, "st5_o3", "institution")
+    browser_page.goto(base + "/cavp/status")
+    browser_page.wait_for_selector(f"#apps-body tr[data-id='{app_id}']")
+    browser_page.click(f"#apps-body tr[data-id='{app_id}']")
+    browser_page.wait_for_selector("#act-review", state="visible")
+    s = app.session_factory()
+    from app.models import CavpApplication
+    s.get(CavpApplication, app_id).status = "approved"; s.commit(); s.close()
+    browser_page.click("#act-review")
+    browser_page.wait_for_function("document.getElementById('detail-status').innerText.includes('시험 완료')")
+    browser_page.wait_for_function(f"document.querySelector(\"#apps-body tr[data-id='{app_id}']\").innerText.includes('시험 완료')")
+    shot(browser_page, "sc05_df17")
+    assert "변경할 수 없습니다" in browser_page.inner_text("#detail-msg")
