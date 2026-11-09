@@ -1,0 +1,39 @@
+name: Nightly (정기 회귀 시험)
+
+# 매일 한 번 main 의 전체 시험을 세 번 연속 실행한다. 한 번이라도 실패하면 흔들리는 시험(Flaky)이 있다는 뜻이다.
+on:
+  schedule:
+    - cron: "0 18 * * *"   # 한국 시간 03:00
+  workflow_dispatch:
+
+jobs:
+  regression:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: webservice
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: webservice/requirements.txt
+      - name: 의존성 설치
+        run: |
+          pip install -r requirements.txt playwright
+          playwright install --with-deps chromium
+      - name: 전체 시험 3회 연속 실행
+        run: |
+          for i in 1 2 3; do
+            echo "::group::실행 $i/3"
+            python -m pytest -q -p no:cacheprovider --junitxml=report-$i.xml
+            echo "::endgroup::"
+          done
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: nightly-reports
+          path: webservice/report-*.xml
