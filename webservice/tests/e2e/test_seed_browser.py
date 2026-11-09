@@ -36,7 +36,7 @@ def pg():
             browser = p.chromium.launch()
         except Exception:
             pytest.skip("Chromium 실행 불가")
-        yield browser.new_page(viewport={"width": 1280, "height": 800})
+        yield browser.new_page(viewport={"width": 1280, "height": 800}, bypass_csp=True)  # 문자열 대기식이 CSP에 막혀 시험에서만 우회(CSP 동작은 ST-10)
         browser.close()
 
 

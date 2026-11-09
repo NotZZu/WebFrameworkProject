@@ -33,7 +33,7 @@ def page(base_url):
             browser = p.chromium.launch()
         except Exception:
             pytest.skip("Chromium 실행 불가")
-        pg = browser.new_page()
+        pg = browser.new_page(bypass_csp=True)  # 문자열 대기식이 CSP에 막혀 시험에서만 우회(CSP 동작은 ST-10)
         pg.goto(base_url + "/")
         yield pg
         browser.close()

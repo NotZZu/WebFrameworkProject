@@ -89,7 +89,9 @@ def create_app(config: dict | None = None) -> Flask:
     def _security_headers(resp):
         resp.headers.setdefault("X-Content-Type-Options", "nosniff")
         resp.headers.setdefault("X-Frame-Options", "DENY")
-        resp.headers.setdefault("Content-Security-Policy", "frame-ancestors 'none'")
+        resp.headers.setdefault("Content-Security-Policy",
+                                "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; "
+                                "img-src 'self' data:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'")
         resp.headers.setdefault("Referrer-Policy", "same-origin")
         return resp
     return app

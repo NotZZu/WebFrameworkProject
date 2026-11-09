@@ -330,3 +330,38 @@ def test_admin_page_access(login_as, make_client):
     assert r.status_code == 302 and r.headers["Location"].endswith("/")
     assert "관리자 대시보드" in officer.get("/dashboard").get_data(as_text=True)
     assert "관리자 대시보드" not in person.get("/dashboard").get_data(as_text=True)
+
+
+# ---------------- 보안 정책(CSP) / 성능 ----------------
+@case("IT-55", "NFR-보안", "모든 화면의 인라인 스크립트 제거와 CSP script-src 'self'", "화면 HTML 에 src 없는 script 와 on* 속성이 없고, CSP 가 script-src 'self'·frame-ancestors 'none' 을 포함, 스크립트 파일은 200 으로 제공", "security")
+def test_pages_have_no_inline_script(login_as, make_client):
+    import re
+    officer, _ = login_as("institution", "officer01")
+    for path in ("/", "/dashboard", "/privacy", "/cavp/apply", "/cavp/status", "/certificates", "/tamper", "/admin"):
+        c = make_client() if path == "/" else officer  # 로그인 화면은 로그인하지 않은 상태에서만 열린다
+        r = c.get(path)
+        html = r.get_data(as_text=True)
+        assert r.status_code == 200, path
+        csp = r.headers["Content-Security-Policy"]
+        assert "script-src 'self'" in csp and "frame-ancestors 'none'" in csp and "'unsafe-inline'" not in csp.split("style-src")[0], path
+        assert not re.search(r"<script(?![^>]*\ssrc=)[^>]*>", html), path
+        assert not re.search(r"\son(click|change|submit|load|error|input)=", html), path
+        for src in re.findall(r'<script[^>]*\ssrc="([^"]+)"', html):
+            js = c.get(src)
+            assert js.status_code == 200 and "javascript" in js.headers["Content-Type"], src
+
+
+@case("IT-56", "NFR-성능", "주요 조회 응답 시간(더미 데이터 300건)", "신청 목록·대시보드·관리자 요약·검증서 목록이 각각 2초 이내", "boundary")
+def test_response_time_under_two_seconds(login_as, db):
+    import time
+    officer, _ = login_as("institution", "officer01")
+    person, u = login_as(username="person01")
+    from app.services.cavp_service import ALGORITHMS
+    for i in range(300):
+        factories.make_application(db, u, ALGORITHMS[i % len(ALGORITHMS)], "cancelled")
+    for path, c in (("/api/cavp/applications?per_page=50", person), ("/api/dashboard", person),
+                    ("/api/admin/summary", officer), ("/api/certificates", officer)):
+        t0 = time.perf_counter()
+        r = c.get(path)
+        elapsed = time.perf_counter() - t0
+        assert r.status_code == 200 and elapsed < 2.0, (path, elapsed)
