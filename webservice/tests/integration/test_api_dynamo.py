@@ -124,6 +124,20 @@ def test_신청_취소와_재신청_흐름(app):
     assert c.get("/api/dashboard").get_json()["applications"]["by_status"]["cancelled"] == 1
 
 
+def test_관리자_요약_흐름(app):
+    c, inst = app.test_client(), app.test_client()
+    signup(c, "dyn_adm_user"); login(c, "dyn_adm_user")
+    signup(inst, "dyn_adm_officer", "institution", "ORG-8"); login(inst, "dyn_adm_officer")
+    assert c.get("/api/admin/summary").status_code == 403
+    for algo in ("AES", "RSA"):
+        c.post("/api/cavp/applications", json={"algorithm_type": algo})
+    first = c.get("/api/cavp/applications").get_json()["items"][0]["id"]
+    c.post(f"/api/cavp/applications/{first}/cancel")
+    d = inst.get("/api/admin/summary").get_json()
+    assert d["applications"]["total"] == 2 and d["applications"]["by_status"]["cancelled"] == 1
+    assert d["applications"]["pending_review"] == 1 and d["recent_applications"][0]["owner"] == "dyn_adm_user"
+
+
 def test_다른_사용자의_신청은_볼_수_없다(app):
     a, b = app.test_client(), app.test_client()
     signup(a, "dyn_user06"); login(a, "dyn_user06")

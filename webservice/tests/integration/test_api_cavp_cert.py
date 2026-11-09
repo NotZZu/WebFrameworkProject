@@ -282,3 +282,51 @@ def test_seeded_demo_accounts(app, db, make_client):
     db.expire_all()
     suspected = db.scalars(select(Certificate).where(Certificate.tamper_status == "suspected")).all()
     assert len(suspected) == 1
+
+
+# ---------------- SC-08 관리자 대시보드 ----------------
+@case("IT-51", "FR-06", "GET /api/admin/summary: 기관 사용자", "200, applications/certificates/recent_applications/attention 키, 타인 신청 포함 집계")
+def test_admin_summary_ok(login_as, db):
+    officer, _ = login_as("institution", "officer01")
+    a, ua = login_as(username="person01")
+    b, ub = login_as(username="person02")
+    factories.make_application(db, ua, "AES", "submitted"); factories.make_application(db, ub, "RSA", "approved")
+    d = officer.get("/api/admin/summary").get_json()
+    assert {"applications", "certificates", "recent_applications", "attention"} <= set(d)
+    assert d["applications"]["total"] == 2 and d["applications"]["pending_review"] == 1
+    assert {r["owner"] for r in d["recent_applications"]} == {"person01", "person02"}
+
+
+@case("IT-52", "FR-06", "GET /api/admin/summary: 접근 통제", "개인·기업 403 FORBIDDEN, 비로그인 401 AUTHENTICATION_FAILED", "security")
+def test_admin_summary_access_control(login_as, make_client):
+    for kind in ("individual", "company"):
+        c, _ = login_as(kind, f"{kind}01")
+        r = c.get("/api/admin/summary")
+        assert r.status_code == 403 and r.get_json()["error"]["code"] == "FORBIDDEN"
+    r = make_client().get("/api/admin/summary")
+    assert r.status_code == 401 and r.get_json()["error"]["code"] == "AUTHENTICATION_FAILED"
+
+
+@case("IT-53", "FR-06", "GET /api/admin/summary: 취소·상태 변경이 집계에 반영", "취소하면 cancelled 증가·in_progress 감소, 심사 시작하면 pending_review 감소")
+def test_admin_summary_follows_changes(login_as):
+    officer, _ = login_as("institution", "officer01")
+    person, _ = login_as(username="person01")
+    first = apply(person, "AES").get_json()["id"]; second = apply(person, "RSA").get_json()["id"]
+    assert officer.get("/api/admin/summary").get_json()["applications"]["pending_review"] == 2
+    cancel(person, first)
+    officer.patch(f"/api/cavp/applications/{second}/status", json={"status": "reviewing"})
+    a = officer.get("/api/admin/summary").get_json()["applications"]
+    assert a["by_status"]["cancelled"] == 1 and a["pending_review"] == 0 and a["in_progress"] == 1
+
+
+@case("IT-54", "FR-06", "GET /admin 페이지 접근", "기관 200, 개인 /dashboard 이동, 비로그인 로그인 화면 이동", "security")
+def test_admin_page_access(login_as, make_client):
+    officer, _ = login_as("institution", "officer01")
+    person, _ = login_as(username="person01")
+    assert officer.get("/admin").status_code == 200
+    r = person.get("/admin")
+    assert r.status_code == 302 and r.headers["Location"].endswith("/dashboard")
+    r = make_client().get("/admin")
+    assert r.status_code == 302 and r.headers["Location"].endswith("/")
+    assert "관리자 대시보드" in officer.get("/dashboard").get_data(as_text=True)
+    assert "관리자 대시보드" not in person.get("/dashboard").get_data(as_text=True)

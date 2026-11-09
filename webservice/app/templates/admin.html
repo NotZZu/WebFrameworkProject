@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>관리자 대시보드 — 자동화 검증시스템</title>
+<style>
+:root{--navy:#1e2761;--accent:#3d5afe;--bg:#f4f6fa;--muted:#6b7488;--line:#dfe3ee;--warn:#d93025;--warnbg:#fdecea}
+*{box-sizing:border-box}
+body{margin:0;font-family:system-ui,-apple-system,"Noto Sans KR","Malgun Gothic",sans-serif;color:var(--navy);background:var(--bg);min-height:100vh;display:grid;grid-template-columns:240px 1fr}
+aside{background:linear-gradient(180deg,#1e2761,#141a47);color:#c9cfee;padding:24px 16px;display:flex;flex-direction:column}
+.logo{display:flex;align-items:center;gap:10px;color:#fff;font-weight:700;margin:0 8px 28px}
+.logo i{width:30px;height:30px;border-radius:8px;background:var(--accent);display:grid;place-items:center;font-style:normal}
+nav a{display:block;padding:11px 12px;border-radius:9px;margin-bottom:4px;font-size:14px;color:#c9cfee;text-decoration:none}
+nav a.on{background:#2b3580;color:#fff;font-weight:700}
+nav a.soon{opacity:.45;cursor:not-allowed}
+.chip{margin-top:auto;display:flex;align-items:center;gap:10px;padding:10px;background:#2b3580;border-radius:10px;color:#fff;font-size:13px}
+.chip b{display:block}.chip small{color:#c9cfee}
+main{padding:32px 40px;max-width:1100px}
+header{display:flex;justify-content:space-between;align-items:center;margin-bottom:24px}
+h1{margin:0;font-size:24px}.sub{color:var(--muted);font-size:14px;margin-top:4px}
+button{font-family:inherit;cursor:pointer}
+.btn{display:inline-block;background:var(--accent);color:#fff;border:0;border-radius:10px;padding:11px 18px;font-size:14px;font-weight:700;text-decoration:none;cursor:pointer}
+.logout{background:none;border:1px solid var(--line);color:var(--navy);border-radius:8px;padding:8px 14px;font-size:13px;margin-left:10px}
+.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:24px}
+.kpi{background:#fff;border-radius:14px;padding:20px;box-shadow:0 2px 10px rgba(30,39,97,.06)}
+.kpi span{font-size:13px;color:var(--muted)}.kpi strong{display:block;font-size:32px;margin-top:8px}
+.kpi.danger strong.alert{color:var(--warn)}
+.kpi.danger.hot{background:var(--warnbg)}
+.grid{display:grid;grid-template-columns:2fr 1fr;gap:16px}
+.panel{background:#fff;border-radius:14px;padding:20px;box-shadow:0 2px 10px rgba(30,39,97,.06)}
+.panel h2{margin:0 0 14px;font-size:16px}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th{text-align:left;color:var(--muted);font-weight:600;padding:8px 6px;border-bottom:1px solid var(--line)}
+td{padding:11px 6px;border-bottom:1px solid #eef0f6}
+.badge{padding:3px 10px;border-radius:99px;font-size:12px;font-weight:700}
+.s-submitted{background:#eef0f6;color:#6b7488}.s-reviewing{background:#e3e9ff;color:var(--accent)}
+.s-approved{background:#e6f4ea;color:#137333}.s-rejected{background:var(--warnbg);color:var(--warn)}.s-cancelled{background:#e4e4e7;color:#52525b;text-decoration:line-through}
+#recent-empty,.empty{color:var(--muted);text-align:center;padding:24px 0;font-size:14px}
+#notifications{list-style:none;margin:0;padding:0}
+#notifications li{padding:10px 12px;border-radius:10px;background:#f4f6fa;margin-bottom:8px;font-size:13px;line-height:1.5}
+#notifications li.warning{background:var(--warnbg);color:var(--warn);font-weight:700}
+@media(max-width:900px){body{grid-template-columns:1fr}aside{display:none}.kpis{grid-template-columns:repeat(2,1fr)}.grid{grid-template-columns:1fr}}
+.kpis.five{grid-template-columns:repeat(4,1fr)}.bars td:first-child{white-space:nowrap}.bars td.num{text-align:right;width:70px;font-variant-numeric:tabular-nums}.bars td.bar div{height:8px;border-radius:4px;background:var(--accent)}.bars td.bar{width:45%}
+.grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-bottom:16px}
+.attn li.info{background:#e3e9ff;color:var(--accent)}
+@media(max-width:900px){.grid3{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<aside>
+  <div class="logo"><i>A</i> 자동화 검증시스템</div>
+  <nav>
+    <a href="/dashboard">대시보드</a>
+    <a href="/privacy">가명·익명정보 처리</a>
+    <a href="/cavp/apply">CAVP 시험 신청</a>
+    <a href="/cavp/status">CAVP 진행상태</a>
+    <a href="/certificates">검증서 이력 조회</a>
+    <a href="/tamper">위변조 탐지 결과</a>
+    <a class="on" href="/admin">관리자 대시보드</a>
+  </nav>
+  <div class="chip"><div><b>{{ user.username }}</b><small>{{ {"individual":"개인","company":"기업","institution":"기관"}[user.user_type] }} 사용자</small></div></div>
+</aside>
+<main>
+  <header>
+    <div>
+      <h1>관리자 대시보드</h1>
+      <div class="sub">전체 사용자의 신청과 검증서 현황입니다.</div>
+    </div>
+    <div><a class="btn" href="/cavp/status">신청 심사하기</a><button class="logout" id="logout">로그아웃</button></div>
+  </header>
+  <section class="kpis">
+    <div class="kpi"><span>전체 신청</span><strong id="kpi-total">–</strong></div>
+    <div class="kpi"><span>진행중 시험</span><strong id="kpi-in-progress">–</strong></div>
+    <div class="kpi"><span>심사 대기</span><strong id="kpi-pending">–</strong></div>
+    <div class="kpi danger" id="kpi-suspected-card"><span>위변조 의심 건</span><strong id="kpi-suspected">–</strong></div>
+  </section>
+  <section class="grid3">
+    <div class="panel"><h2>상태별 신청</h2><table class="bars"><tbody id="status-body"></tbody></table></div>
+    <div class="panel"><h2>알고리즘별 신청</h2><table class="bars"><tbody id="algo-body"></tbody></table></div>
+    <div class="panel"><h2>주의 사항</h2><ul id="attention" class="attn" style="list-style:none;margin:0;padding:0"></ul></div>
+  </section>
+  <section class="panel"><h2>최근 신청</h2>
+    <table><thead><tr><th>번호</th><th>알고리즘</th><th>신청자</th><th>신청일시</th><th>상태</th></tr></thead><tbody id="recent-body"></tbody></table>
+  </section>
+</main>
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const LABELS = {submitted: "접수 대기", reviewing: "시험 진행중", approved: "시험 완료", rejected: "반려", cancelled: "취소"};
+const STATUS_ORDER = ["submitted", "reviewing", "approved", "rejected", "cancelled"];
+const ALGO_ORDER = ["AES", "SHA-2", "SHA-3", "HMAC", "RSA", "ECDSA", "DRBG"];
+function bars(obj, order, labels) {
+  const max = Math.max(1, ...Object.values(obj));
+  return order.filter(k => k in obj).map(k => { const n = obj[k]; return `<tr><td>${esc(labels ? labels[k] : k)}</td><td class="bar"><div style="width:${Math.round(n / max * 100)}%"></div></td><td class="num">${n}</td></tr>`; }).join("");
+}
+async function load() {
+  const r = await fetch("/api/admin/summary");
+  if (r.status === 401) { location.href = "/"; return; }
+  if (r.status === 403) { location.href = "/dashboard"; return; }
+  const d = await r.json();
+  const a = d.applications;
+  $("kpi-total").textContent = a.total;
+  $("kpi-in-progress").textContent = a.in_progress;
+  $("kpi-pending").textContent = a.pending_review;
+  $("kpi-suspected").textContent = d.certificates.suspected;
+  if (d.certificates.suspected > 0) { $("kpi-suspected").classList.add("alert"); $("kpi-suspected-card").classList.add("hot"); }
+  $("status-body").innerHTML = bars(a.by_status, STATUS_ORDER, LABELS);
+  $("algo-body").innerHTML = bars(a.by_algorithm, ALGO_ORDER);
+  $("attention").innerHTML = d.attention.length
+    ? d.attention.map(n => `<li class="${n.type === "warning" ? "warning" : "info"}" style="padding:10px 12px;border-radius:10px;margin-bottom:8px;font-size:13px;line-height:1.5;${n.type === "warning" ? "background:var(--warnbg);color:var(--warn);font-weight:700" : ""}">${esc(n.message)}</li>`).join("")
+    : `<li class="empty">주의할 항목이 없습니다.</li>`;
+  $("recent-body").innerHTML = d.recent_applications.length ? d.recent_applications.map(x =>
+    `<tr><td>#${x.id}</td><td>${esc(x.algorithm_type)}</td><td>${esc(x.owner || "")}</td><td>${esc(x.submitted_at)}</td>` +
+    `<td><span class="badge s-${x.status}">${esc(x.status_label)}</span></td></tr>`).join("")
+    : `<tr><td colspan="5" class="empty">아직 신청 내역이 없습니다.</td></tr>`;
+}
+$("logout").onclick = async () => { await fetch("/api/auth/logout", {method: "POST"}); location.href = "/"; };
+load();
+</script>
+</body>
+</html>

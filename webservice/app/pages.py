@@ -1,4 +1,4 @@
-"""화면(HTML) 라우트: SC-01 로그인/회원가입, SC-02 대시보드, SC-03 가명·익명정보 처리, SC-04/05 CAVP, SC-06 검증서 이력, SC-07 위변조 탐지."""
+"""화면(HTML) 라우트: SC-01 로그인/회원가입, SC-02 대시보드, SC-03 가명·익명정보 처리, SC-04/05 CAVP, SC-06 검증서 이력, SC-07 위변조 탐지, SC-08 관리자 대시보드(기관 전용)."""
 from flask import Blueprint, jsonify, redirect, render_template, url_for
 
 from .api.helpers import session_user
@@ -19,6 +19,16 @@ def dashboard():
     if user is None:
         return redirect(url_for("pages.login_page"))
     return render_template("dashboard.html", user=user)
+
+
+@bp.get("/admin")
+def admin():
+    user = session_user()
+    if user is None:
+        return redirect(url_for("pages.login_page"))
+    if user.user_type != "institution":
+        return redirect(url_for("pages.dashboard"))
+    return render_template("admin.html", user=user)
 
 
 @bp.get("/privacy")
