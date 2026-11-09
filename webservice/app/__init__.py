@@ -67,6 +67,7 @@ def create_app(config: dict | None = None) -> Flask:
     else:
         raise RuntimeError("STORE_BACKEND 는 sql 또는 dynamodb 여야 합니다.")
 
+    from .api import admin as admin_api
     from .api import auth as auth_api
     from .api import cavp as cavp_api
     from .api import certificates as certificates_api
@@ -75,6 +76,7 @@ def create_app(config: dict | None = None) -> Flask:
     from .api.helpers import register_error_handlers
     from . import pages
 
+    app.register_blueprint(admin_api.bp)
     app.register_blueprint(auth_api.bp)
     app.register_blueprint(cavp_api.bp)
     app.register_blueprint(certificates_api.bp)

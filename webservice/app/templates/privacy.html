@@ -68,6 +68,9 @@ dl{margin:0}dt{font-size:13px;color:var(--muted);margin-top:14px}dd{margin:4px 0
     <a href="/cavp/status">CAVP 진행상태</a>
     <a href="/certificates">검증서 이력 조회</a>
     <a href="/tamper">위변조 탐지 결과</a>
+{% if user.user_type == "institution" %}
+    <a href="/admin">관리자 대시보드</a>
+{% endif %}
   </nav>
   <div class="chip"><div><b>{{ user.username }}</b><small>{{ {"individual":"개인","company":"기업","institution":"기관"}[user.user_type] }} 사용자</small></div></div>
 </aside>
