@@ -65,10 +65,10 @@
 | SC-02       | 마이페이지 대시보드     | 로그인 사용자의 신청 현황·검증서 요약 조회              | FR-01, FR-03, FR-04 |
 | SC-03       | 가명·익명정보 처리 신청 | 더미 개인정보 입력 → 가명/익명 처리 규칙 적용 결과 확인 | FR-02               |
 | SC-04       | CAVP 시험 신청          | 시험 대상 알고리즘 선택 및 시험 신청서 작성             | FR-03               |
-| SC-05       | CAVP 시험 진행상태 조회 | 신청 목록 및 상태(접수/심사중/승인/반려) 조회           | FR-03               |
+| SC-05       | CAVP 시험 진행상태 조회 | 신청 목록 및 상태(접수/심사중/승인/반려/취소) 조회           | FR-03               |
 | SC-06       | 검증서 이력 조회        | 발급된 검증서 목록 및 상세 정보 조회                    | FR-04               |
 | SC-07       | 검증서 위변조 탐지 결과 | 선택한 검증서의 무결성 점검 결과 표시                   | FR-05               |
-| SC-08       | 관리자 대시보드 (Could) | 전체 신청/처리 현황 요약, 상태 변경                     | FR-06               |
+| SC-08       | 관리자 대시보드 (구현 완료) | 전체 신청/처리 현황 요약, 상태 변경                     | FR-06               |
 
 3.2 주요 화면 상세
 
@@ -133,7 +133,7 @@ users(1) — personal_info(1:1), users(1) — cavp_applications(1:N), cavp_appli
 | id                        | INTEGER PK                                     | 신청 ID                            |
 | user_id                   | INTEGER FK → users.id                          | 신청자                             |
 | algorithm_type            | VARCHAR(50)                                    | 시험 대상 암호 알고리즘(더미 목록) |
-| status                    | ENUM(submitted, reviewing, approved, rejected) | 진행 상태                          |
+| status                    | ENUM(submitted, reviewing, approved, rejected, cancelled) | 진행 상태                          |
 | submitted_at / updated_at | DATETIME                                       | 신청/갱신 일시                     |
 
 **certificates**
@@ -159,7 +159,8 @@ users(1) — personal_info(1:1), users(1) — cavp_applications(1:N), cavp_appli
 | GET        | /api/cavp/applications        | 신청 목록/상태 조회              | SC-05         |
 | GET        | /api/certificates             | 검증서 이력 목록 조회            | SC-06         |
 | GET        | /api/certificates/{id}/verify | 검증서 위변조 탐지 결과 조회     | SC-07         |
-| GET        | /api/admin/summary            | 관리자 대시보드 요약(Could)      | SC-08         |
+| POST       | /api/cavp/applications/{id}/cancel | 접수 대기 신청 취소(본인)       | SC-05         |
+| GET        | /api/admin/summary            | 관리자 대시보드 요약(기관 전용)  | SC-08         |
 
 6\. 요구사항-설계 매핑
 
