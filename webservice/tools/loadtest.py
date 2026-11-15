@@ -3,6 +3,7 @@ load_seed.py 로 만든 계정(load_inst, load_u0001…)으로 로그인해 주�
 지연(중앙값·95%·최대), 초당 처리량, 오류 건수를 표로 출력한다. 읽기와 쓰기를 따로 잰다."""
 import http.client
 import json
+import os
 import random
 import statistics
 import sys
@@ -11,12 +12,24 @@ import time
 from urllib.parse import urlparse
 
 
+# 계정 설정(환경변수로 바꾼다). 기본값은 load_seed.py 가 만든 로컬 시험 계정.
+INST = os.environ.get("LOAD_INST", "load_inst")
+PREFIX = os.environ.get("LOAD_USER_PREFIX", "load_u")
+NUSERS = int(os.environ.get("LOAD_NUSERS", "400"))
+PASSWORD = os.environ.get("LOAD_PASSWORD", "Load1234")
+
+
 class Client:
     def __init__(self, base):
         u = urlparse(base)
-        self.host, self.port = u.hostname, u.port or 80
+        self.tls = u.scheme == "https"
+        self.host, self.port = u.hostname, u.port or (443 if self.tls else 80)
         self.cookie = ""
-        self.conn = http.client.HTTPConnection(self.host, self.port, timeout=60)
+        self.conn = self._new_conn()
+
+    def _new_conn(self):
+        cls = http.client.HTTPSConnection if self.tls else http.client.HTTPConnection
+        return cls(self.host, self.port, timeout=60)
 
     def call(self, method, path, body=None):
         headers = {"Cookie": self.cookie, "Content-Type": "application/json"} if self.cookie else {"Content-Type": "application/json"}
@@ -29,7 +42,7 @@ class Client:
                 break
             except (http.client.HTTPException, OSError):
                 self.conn.close()
-                self.conn = http.client.HTTPConnection(self.host, self.port, timeout=60)
+                self.conn = self._new_conn()
                 if attempt == 2:
                     return 0, b""
         sc = r.getheader("Set-Cookie")
@@ -37,7 +50,8 @@ class Client:
             self.cookie = sc.split(";", 1)[0]
         return r.status, raw
 
-    def login(self, username, password="Load1234"):
+    def login(self, username, password=None):
+        password = password or PASSWORD
         return self.call("POST", "/api/auth/login", {"username": username, "password": password})[0]
 
 
@@ -74,7 +88,7 @@ def main():
 
     def inst(i):
         c = Client(base)
-        assert c.login("load_inst") == 200, "load_inst 로그인 실패 (load_seed.py 먼저 실행)"
+        assert c.login(INST) == 200, f"{INST} 로그인 실패 (시딩을 먼저 실행)"
         return c
     rows = [
         run("대시보드(기관)", workers, total, inst, lambda c: c.call("GET", "/api/dashboard")[0]),
@@ -85,8 +99,8 @@ def main():
 
     def user(i):
         c = Client(base)
-        assert c.login(f"load_u{(i % 400) + 1:04d}") == 200
-        c.uid = (i % 400) + 1
+        assert c.login(f"{PREFIX}{(i % NUSERS) + 1:04d}") == 200
+        c.uid = (i % NUSERS) + 1
         return c
     rows.append(run("개인 대시보드", workers, total, user, lambda c: c.call("GET", "/api/dashboard")[0]))
     rows.append(run("신청 생성(쓰기)", workers, total, user,
@@ -94,7 +108,7 @@ def main():
                     ok=(201, 409)))
     nlogin = max(workers, 16)
     rows.append(run("로그인(bcrypt)", min(workers, 8), nlogin, lambda i: Client(base),
-                    lambda c: c.login(f"load_u{random.randint(1, 400):04d}")))
+                    lambda c: c.login(f"{PREFIX}{random.randint(1, NUSERS):04d}")))
     print(f"동시 {workers}, 시나리오당 약 {total}건")
     print(f"{'시나리오':<14}{'건수':>6}{'초당':>8}{'중앙값ms':>10}{'95%ms':>9}{'최대ms':>9}  오류")
     for r in rows:
