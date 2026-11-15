@@ -148,13 +148,35 @@ class DynamoStore(Store):
             raise RuntimeError(f"사용자 저장 실패: {codes}")
         return _user(item)
 
+    def _batch_get(self, keys):
+        """{(pk, sk): 항목}. 100개씩 나누어 일괄 조회한다. 최종 일관성으로 먼저 읽고, 못 찾은 키만 강한 일관성으로 한 번 더 읽는다
+        (방금 쓴 항목일 수 있으므로). 처리 못 한 키(UnprocessedKeys)는 다시 보낸다."""
+        found, want = {}, list(dict.fromkeys(keys))
+        for consistent in (False, True):
+            todo = [k for k in want if k not in found]
+            for i in range(0, len(todo), 100):
+                pending = [{"pk": pk, "sk": sk} for pk, sk in todo[i:i + 100]]
+                for attempt in range(_RETRIES):
+                    r = self.client.batch_get_item(RequestItems={self.name: {"Keys": pending, "ConsistentRead": consistent}})
+                    for it in r.get("Responses", {}).get(self.name, []):
+                        found[(it["pk"], it["sk"])] = it
+                    pending = r.get("UnprocessedKeys", {}).get(self.name, {}).get("Keys", [])
+                    if not pending:
+                        break
+                    time.sleep(0.02 * (attempt + 1))
+            if all(k in found for k in want):
+                break
+        return found
+
     def get_users_by_ids(self, ids) -> dict:
-        out = {}
-        for uid in set(ids):
-            u = self.get_user(uid)
-            if u is not None:
-                out[uid] = u
-        return out
+        ids = {i for i in ids if isinstance(i, int) and not isinstance(i, bool)}
+        found = self._batch_get([(f"USER#{i}", "PROFILE") for i in ids])
+        return {i: _user(found[(f"USER#{i}", "PROFILE")]) for i in ids if (f"USER#{i}", "PROFILE") in found}
+
+    def get_applications_by_ids(self, ids) -> dict:
+        ids = {i for i in ids if isinstance(i, int) and not isinstance(i, bool)}
+        found = self._batch_get([(f"APP#{i}", "META") for i in ids])
+        return {i: _app(found[(f"APP#{i}", "META")]) for i in ids if (f"APP#{i}", "META") in found}
 
     # ---- 로그인 세션 ----
     def add_session(self, sid, user_id):
@@ -230,10 +252,10 @@ class DynamoStore(Store):
                 return False  # 조건 불일치: 다른 요청이 먼저 상태를 바꿨다
         return False
 
-    def _query_apps(self, pk, status=None):
+    def _query_apps(self, pk, status=None, consistent=True):
         kw = {"KeyConditionExpression": "pk = :p AND begins_with(sk, :a)",
               "ExpressionAttributeValues": {":p": pk, ":a": "APP#"},
-              "ScanIndexForward": False, "ConsistentRead": True}
+              "ScanIndexForward": False, "ConsistentRead": consistent}
         if status is not None:
             kw["FilterExpression"] = "#s = :st"
             kw["ExpressionAttributeNames"] = {"#s": "status"}
@@ -251,15 +273,26 @@ class DynamoStore(Store):
         start = (page - 1) * per_page
         return [_app(i) for i in items[start:start + per_page]], len(items)
 
-    def all_applications(self, user_id):
+    def _apps(self, user_id, consistent=True):
         pk = "ALL" if user_id is None else f"USER#{user_id}"
-        if ("apps", pk) not in self._memo:  # 한 요청에서 같은 목록을 여러 번 읽으면 읽기 용량이 그만큼 더 든다
-            self._memo[("apps", pk)] = [_app(i) for i in self._query_apps(pk)]
-        return list(self._memo[("apps", pk)])
+        if consistent is False and ("apps", pk, True) in self._memo:  # 이미 강한 읽기로 읽었으면 그것을 쓴다
+            consistent = True
+        key = ("apps", pk, consistent)
+        if key not in self._memo:  # 한 요청에서 같은 목록을 여러 번 읽으면 읽기 용량이 그만큼 더 든다
+            self._memo[key] = [_app(i) for i in self._query_apps(pk, consistent=consistent)]
+        return list(self._memo[key])
+
+    def all_applications(self, user_id):
+        return self._apps(user_id, True)
+
+    def _agg_apps(self, user_id):
+        # 기관 전체 집계는 정확히 '지금'일 필요가 없어(대시보드 숫자) 최종 일관성 읽기로 읽기 용량을 절반으로 줄인다.
+        # 본인 범위는 방금 한 일이 바로 보여야 하므로 강한 일관성을 유지한다.
+        return self._apps(user_id, consistent=user_id is not None)
 
     def recent_applications(self, user_id, limit):
         pk = "ALL" if user_id is None else f"USER#{user_id}"
-        if ("apps", pk) in self._memo:
+        if any(k[:2] == ("apps", pk) for k in self._memo):
             return super().recent_applications(user_id, limit)
         # sk 가 APP#<시각>#<번호> 라 역순 Query 의 앞쪽이 최신순이다. 필요한 만큼만 읽는다.
         r = self.table.query(KeyConditionExpression="pk = :p AND begins_with(sk, :a)",
@@ -326,16 +359,25 @@ class DynamoStore(Store):
                 return None
         return None
 
-    def list_certificates(self, user_id):
+    def _certs(self, user_id, consistent=True):
         pk = "ALL" if user_id is None else f"USER#{user_id}"
-        if ("certs", pk) not in self._memo:
-            self._memo[("certs", pk)] = self._query_certs(user_id)
-        return list(self._memo[("certs", pk)])
+        if consistent is False and ("certs", pk, True) in self._memo:
+            consistent = True
+        key = ("certs", pk, consistent)
+        if key not in self._memo:
+            self._memo[key] = self._query_certs(user_id, consistent)
+        return list(self._memo[key])
 
-    def _query_certs(self, user_id):
+    def list_certificates(self, user_id):
+        return self._certs(user_id, True)
+
+    def _agg_certs(self, user_id):
+        return self._certs(user_id, consistent=user_id is not None)
+
+    def _query_certs(self, user_id, consistent=True):
         kw = {"KeyConditionExpression": "pk = :p AND begins_with(sk, :c)",
               "ExpressionAttributeValues": {":p": "ALL" if user_id is None else f"USER#{user_id}", ":c": "CERT#"},
-              "ScanIndexForward": False, "ConsistentRead": True}
+              "ScanIndexForward": False, "ConsistentRead": consistent}
         items = []
         while True:
             r = self.table.query(**kw)

@@ -84,3 +84,60 @@ def test_쓰기_뒤에는_같은_저장소_객체도_새_값을_본다(env, tmp_
     assert stats["total"] == before and stats["by_status"].get("approved") == 1
     store.create_application(users[0].id, "RSA")
     assert store.application_stats(None, __import__("datetime").datetime(2000, 1, 1))["total"] == before + 1
+
+
+class CountingClient:
+    def __init__(self, client):
+        self._c, self.batch = client, []
+
+    def batch_get_item(self, **kw):
+        self.batch.append(kw)
+        return self._c.batch_get_item(**kw)
+
+    def __getattr__(self, name):
+        return getattr(self._c, name)
+
+
+def test_기관_전체_집계는_최종_일관성_읽기로_비용을_반으로_줄인다(env):
+    store, counting, inst, users = env
+    dashboard_service.get_summary(store, inst.id)
+    admin_service.get_summary(store, inst.id)
+    agg = [q for q in counting.queries if q["ExpressionAttributeValues"][":p"] == "ALL"]
+    assert agg and all(q["ConsistentRead"] is False for q in agg)
+
+
+def test_개인_대시보드는_강한_일관성_읽기를_유지한다(env):
+    store, counting, inst, users = env
+    dashboard_service.get_summary(store, users[0].id)
+    own = [q for q in counting.queries if q["ExpressionAttributeValues"][":p"].startswith("USER#")]
+    assert own and all(q["ConsistentRead"] is True for q in own)
+
+
+def test_목록_화면_조회는_강한_일관성을_유지한다(env):
+    store, counting, inst, users = env
+    store.list_applications(None, None, 1, 10)
+    assert counting.queries[-1]["ConsistentRead"] is True
+
+
+def test_여러_신청과_사용자는_한_번의_일괄_조회로_가져온다(env):
+    store, counting, inst, users = env
+    store.client = CountingClient(store.client)
+    ids = {a.id for a in store.recent_applications(None, 5)}
+    got = store.get_applications_by_ids(ids)
+    assert set(got) == ids
+    owners = store.get_users_by_ids({a.user_id for a in got.values()})
+    assert set(owners) == {a.user_id for a in got.values()}
+    assert len(store.client.batch) == 2  # 신청 한 번, 사용자 한 번(모두 있으면 재확인 없음)
+    assert store.get_applications_by_ids({9999}) == {} and store.get_users_by_ids({9999}) == {}
+    assert store.get_users_by_ids({True}) == {}
+
+
+def test_일괄_조회는_100건_넘어도_나누어_모두_가져온다(env):
+    store, counting, inst, users = env
+    store.client = CountingClient(store.client)
+    # 존재하지 않는 id 를 섞어 250개를 요청해도 있는 것만 돌려주고 호출은 100개 단위로 나뉜다
+    got = store.get_applications_by_ids(set(range(1, 251)))
+    assert len(got) == 12
+    eventual = [b for b in store.client.batch if b["RequestItems"]["rc"]["ConsistentRead"] is False]
+    assert len(eventual) == 3  # 없는 항목은 방금 쓴 것일 수 있어 강한 일관성으로 한 번 더 확인한다
+    assert len(store.client.batch) > len(eventual)
