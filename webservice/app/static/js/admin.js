@@ -25,7 +25,7 @@ async function load() {
     : `<li class="empty">주의할 항목이 없습니다.</li>`;
   $("recent-body").innerHTML = d.recent_applications.length ? d.recent_applications.map(x =>
     `<tr><td>#${x.id}</td><td>${esc(x.algorithm_type)}</td><td>${esc(x.owner || "")}</td><td>${esc(x.submitted_at)}</td>` +
-    `<td><span class="badge s-${x.status}">${esc(x.status_label)}</span></td></tr>`).join("")
+    `<td><span class="krds-badge s-${x.status}">${esc(x.status_label)}</span></td></tr>`).join("")
     : `<tr><td colspan="5" class="empty">아직 신청 내역이 없습니다.</td></tr>`;
 }
 $("logout").onclick = async () => { await fetch("/api/auth/logout", {method: "POST"}); location.href = "/"; };

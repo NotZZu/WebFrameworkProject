@@ -14,7 +14,7 @@ async function loadList() {
   const d = await (await api("/api/cavp/applications?per_page=50")).json();
   $("my-apps-body").innerHTML = d.items.length ? d.items.map(a =>
     `<tr><td>#${a.id}</td><td>${esc(a.algorithm_type)}</td><td>${esc(a.submitted_at)}</td>` +
-    `<td><span class="badge s-${a.status}">${esc(a.status_label)}</span></td></tr>`).join("")
+    `<td><span class="krds-badge s-${a.status}">${esc(a.status_label)}</span></td></tr>`).join("")
     : `<tr><td colspan="4" class="empty">아직 신청 내역이 없습니다.</td></tr>`;
 }
 $("submit-app").onclick = async () => {

@@ -1,0 +1,30 @@
+{#- KRDS(대한민국 정부 디자인 시스템) 적용 공통 레이아웃: 표준형(상단 가로 메뉴). -#}
+{%- set menu = [("dashboard","/dashboard","대시보드"),("privacy","/privacy","가명·익명정보 처리"),("apply","/cavp/apply","CAVP 시험 신청"),("status","/cavp/status","CAVP 진행상태"),("history","/certificates","검증서 이력 조회"),("tamper","/tamper","위변조 탐지 결과")] -%}
+{%- if user.user_type == "institution" %}{% set menu = menu + [("admin","/admin","관리자 대시보드")] %}{% endif -%}
+{%- set kind = {"individual":"개인","company":"기업","institution":"기관"}[user.user_type] -%}
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>{% block title %}{% endblock %} — 자동화 검증시스템</title>
+<link rel="stylesheet" href="/static/krds/resources/css/common/common.css">
+<link rel="stylesheet" href="/static/krds/resources/css/component/component.css">
+<link rel="stylesheet" href="/static/app.css">
+</head>
+<body class="ui-1"{% block body_attr %}{% endblock %}>
+<a class="skip" href="#main">본문 바로가기</a>
+<header class="app-header"><div class="inner">
+  <a class="logo" href="/dashboard"><i>A</i> 자동화 검증시스템</a>
+  <div class="userbox"><div class="who"><b>{{ user.username }}</b><small>{{ kind }} 사용자</small></div><button class="krds-btn small secondary" id="logout" type="button">로그아웃</button></div>
+</div></header>
+<nav class="gnb" aria-label="주 메뉴"><ul>{% for key, url, label in menu %}<li><a href="{{ url }}"{% if key == active %} class="on" aria-current="page"{% endif %}>{{ label }}</a></li>{% endfor %}</ul></nav>
+<div class="shell">
+  <main id="main" class="app-main">
+    <div class="page-head">{% block head %}{% endblock %}</div>
+{% block content %}{% endblock %}
+  </main>
+</div>
+{% include "_footer.html" %}
+{% block scripts %}{% endblock %}
+</body>
+</html>

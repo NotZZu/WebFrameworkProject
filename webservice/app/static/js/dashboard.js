@@ -13,7 +13,7 @@ async function load() {
   const rows = d.recent_applications;
   $("recent-body").innerHTML = rows.length ? rows.map(a =>
     `<tr><td>#${a.id}</td><td>${esc(a.algorithm_type)}</td><td>${a.submitted_at}</td>` +
-    `<td><span class="badge s-${a.status}">${esc(a.status_label)}</span></td></tr>`).join("")
+    `<td><span class="krds-badge s-${a.status}">${esc(a.status_label)}</span></td></tr>`).join("")
     : `<tr><td colspan="4" id="recent-empty">아직 신청 내역이 없습니다.</td></tr>`;
   $("notifications").innerHTML = d.notifications.length
     ? d.notifications.map(n => `<li class="${n.type}">${esc(n.message)}</li>`).join("")

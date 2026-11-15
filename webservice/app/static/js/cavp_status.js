@@ -18,7 +18,7 @@ async function loadList() {
   $("apps-body").innerHTML = d.items.length ? d.items.map(a =>
     `<tr class="item${selected === a.id ? " sel" : ""}" data-id="${a.id}"><td>#${a.id}</td><td>${esc(a.algorithm_type)}</td>` +
     (isAll ? `<td>${esc(a.owner || "")}</td>` : "") +
-    `<td>${esc(a.submitted_at)}</td><td><span class="badge s-${a.status}">${esc(a.status_label)}</span></td></tr>`).join("")
+    `<td>${esc(a.submitted_at)}</td><td><span class="krds-badge s-${a.status}">${esc(a.status_label)}</span></td></tr>`).join("")
     : `<tr><td colspan="${isAll ? 5 : 4}" class="empty">아직 신청 내역이 없습니다.</td></tr>`;
   $("total-count").textContent = `총 ${d.total}건`;
   $("page-info").textContent = `${page} / ${pages}`;

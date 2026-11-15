@@ -8,7 +8,7 @@ async function api(url, opt) {
   if (r.status === 401) { location.href = "/"; throw new Error("auth"); }
   return r;
 }
-const badge = c => `<span class="badge t-${esc(c.tamper_status)}">${esc(c.tamper_label)}</span>`;
+const badge = c => `<span class="krds-badge t-${esc(c.tamper_status)}">${esc(c.tamper_label)}</span>`;
 function pager() {
   const pages = Math.max(1, Math.ceil(total / PER));
   $("page-info").textContent = `${page} / ${pages}`;
@@ -38,7 +38,7 @@ function select(id) {
 function renderTamper() {
   $("tamper-body").innerHTML = items.length ? items.map(c =>
     `<tr class="item${c.tamper_status === "suspected" ? " bad" : ""}" data-id="${c.id}"><td>CV-${String(c.id).padStart(4, "0")}</td><td>${esc(c.algorithm_type)}</td><td>${esc(c.cert_type)}</td>` +
-    `<td>${esc(c.issued_at)}</td><td class="st">${badge(c)}</td><td><button class="btn sm ghost verify" type="button" data-id="${c.id}">검증</button></td></tr>`).join("")
+    `<td>${esc(c.issued_at)}</td><td class="st">${badge(c)}</td><td><button class="krds-btn small tertiary verify" type="button" data-id="${c.id}">검증</button></td></tr>`).join("")
     : `<tr><td colspan="6" class="empty">발급된 검증서가 없습니다.</td></tr>`;
   document.querySelectorAll("#tamper-body button.verify").forEach(b => b.onclick = e => { e.stopPropagation(); verify(Number(b.dataset.id), true); });
   summary();
