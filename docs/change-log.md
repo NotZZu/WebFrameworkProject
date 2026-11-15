@@ -9,6 +9,7 @@
 | 3 | SC-08 관리자 대시보드 구현 | `GET /api/admin/summary`(기관 전용)와 `/admin` 화면. 전체 신청의 상태별·알고리즘별 건수, 심사 대기, 최근 7일 신청, 위변조 의심 검증서, 최근 신청 5건, 주의 사항을 보여 준다. 개인·기업 계정은 API 403, 화면은 대시보드로 이동. | UT-ADM-01~11, IT-51~54, ST-09 계열 |
 | 4 | 보안 정책(CSP) 확대 | 화면의 인라인 스크립트를 `app/static/js/*.js`로 분리하고 `script-src 'self'`를 적용했다. 이전에는 `frame-ancestors 'none'`만 적용했다. 스타일은 인라인을 허용한다(`style-src 'self' 'unsafe-inline'`). | IT-55, ST-10 |
 | 5 | 상태 변경 실패 처리(DF-17) | 실패 시 상세와 목록을 먼저 다시 불러온 뒤 오류 안내를 표시한다. | ST-05-N6 |
+| 6 | 화면 디자인 KRDS 적용 | 대한민국 정부 디자인 시스템(KRDS) HTML 컴포넌트 키트의 토큰·컴포넌트(krds-btn, krds-input, krds-badge, krds-table-wrap)와 글꼴 Pretendard GOV를 적용하고, 레이아웃을 표준형(상단 가로 메뉴)으로 바꿨다. 기능·API·요소 id는 그대로이며 클래스 이름과 배치만 바뀌었다. 키트 파일은 `app/static/krds/`에 있고 출처는 KRDS(www.krds.go.kr)다. | 기존 전체 시험 통과(599건) |
 
 ## 시험 문서와의 관계
 
