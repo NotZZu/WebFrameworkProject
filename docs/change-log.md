@@ -10,6 +10,7 @@
 | 4 | 보안 정책(CSP) 확대 | 화면의 인라인 스크립트를 `app/static/js/*.js`로 분리하고 `script-src 'self'`를 적용했다. 이전에는 `frame-ancestors 'none'`만 적용했다. 스타일은 인라인을 허용한다(`style-src 'self' 'unsafe-inline'`). | IT-55, ST-10 |
 | 5 | 상태 변경 실패 처리(DF-17) | 실패 시 상세와 목록을 먼저 다시 불러온 뒤 오류 안내를 표시한다. | ST-05-N6 |
 | 6 | 화면 디자인 KRDS 적용 | 대한민국 정부 디자인 시스템(KRDS) HTML 컴포넌트 키트의 토큰·컴포넌트(krds-btn, krds-input, krds-badge, krds-table-wrap)와 글꼴 Pretendard GOV를 적용하고, 레이아웃을 표준형(상단 가로 메뉴)으로 바꿨다. 기능·API·요소 id는 그대로이며 클래스 이름과 배치만 바뀌었다. 키트 파일은 `app/static/krds/`에 있고 출처는 KRDS(www.krds.go.kr)다. | 기존 전체 시험 통과(599건) |
+| 7 | 응답속도·동시 처리 개선(NFR-성능) | 대시보드·관리자 요약·검증서 목록이 전체 행을 읽어 파이썬에서 세던 방식을 DB 집계/쪽 나누기로 바꿨다(`Store.application_stats` 등 6개 메서드, DynamoDB 는 기본 구현으로 같은 결과). 검증서 목록의 신청 조회 N+1 제거. SQLite 는 WAL·busy_timeout 과 조회용 색인 4개 추가. 부하 측정 도구 `tools/load_seed.py`·`tools/loadtest.py` 추가. | 저장소 계약 시험(신규 6개×2 구현), UT-DB 튜닝 3건 |
 
 ## 시험 문서와의 관계
 

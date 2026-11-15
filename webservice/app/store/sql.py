@@ -2,7 +2,7 @@
 import os
 import pathlib
 
-from sqlalchemy import func, select, update
+from sqlalchemy import case, func, select, update
 from sqlalchemy.exc import IntegrityError
 
 from ..errors import DuplicateApplicationError, DuplicateUsernameError
@@ -107,6 +107,62 @@ class SqlStore(Store):
         if user_id is not None:
             q = q.where(CavpApplication.user_id == user_id)
         return list(self.session.scalars(q))
+
+    # ---- 집계·쪽 나누기: 전체 행을 파이썬으로 가져오지 않고 DB 가 세어 준다 ----
+    @staticmethod
+    def _owner_cond(user_id):
+        return [] if user_id is None else [CavpApplication.user_id == user_id]
+
+    def application_stats(self, user_id, since):
+        # 한 번의 GROUP BY 로 상태·알고리즘별 건수와 최근 7일 신규 건수를 함께 구한다
+        rows = self.session.execute(
+            select(CavpApplication.status, CavpApplication.algorithm_type, func.count(),
+                   func.sum(case((CavpApplication.submitted_at >= since, 1), else_=0)))
+            .where(*self._owner_cond(user_id))
+            .group_by(CavpApplication.status, CavpApplication.algorithm_type)).all()
+        by_status, by_algo, total, new = {}, {}, 0, 0
+        for status, algo, n, new_n in rows:
+            by_status[status] = by_status.get(status, 0) + n
+            by_algo[algo] = by_algo.get(algo, 0) + n
+            total += n
+            new += int(new_n or 0)
+        return {"total": total, "by_status": by_status, "by_algorithm": by_algo, "new_since": new}
+
+    def recent_applications(self, user_id, limit):
+        return list(self.session.scalars(
+            select(CavpApplication).where(*self._owner_cond(user_id))
+            .order_by(CavpApplication.submitted_at.desc(), CavpApplication.id.desc()).limit(limit)))
+
+    def recent_updated_applications(self, user_id, statuses, limit):
+        return list(self.session.scalars(
+            select(CavpApplication).where(*self._owner_cond(user_id), CavpApplication.status.in_(list(statuses)))
+            .order_by(CavpApplication.updated_at.desc(), CavpApplication.id.desc()).limit(limit)))
+
+    def get_applications_by_ids(self, ids) -> dict:
+        ids = set(ids)
+        if not ids:
+            return {}
+        return {a.id: a for a in self.session.scalars(select(CavpApplication).where(CavpApplication.id.in_(ids)))}
+
+    def _cert_scope(self, q, user_id):
+        if user_id is not None:
+            q = q.join(CavpApplication, Certificate.application_id == CavpApplication.id) \
+                .where(CavpApplication.user_id == user_id)
+        return q
+
+    def certificate_stats(self, user_id):
+        total = self.session.scalar(self._cert_scope(select(func.count()).select_from(Certificate), user_id))
+        ids = self.session.scalars(self._cert_scope(
+            select(Certificate.id).where(Certificate.tamper_status == "suspected"), user_id)
+            .order_by(Certificate.id)).all()
+        return {"total": total, "suspected_ids": list(ids)}
+
+    def list_certificates_page(self, user_id, page, per_page):
+        total = self.session.scalar(self._cert_scope(select(func.count()).select_from(Certificate), user_id))
+        items = self.session.scalars(self._cert_scope(select(Certificate), user_id)
+                                     .order_by(Certificate.issued_at.desc(), Certificate.id.desc())
+                                     .limit(per_page).offset((page - 1) * per_page)).all()
+        return list(items), total
 
     # ---- 검증서·가명정보 ----
     def list_certificates(self, user_id):

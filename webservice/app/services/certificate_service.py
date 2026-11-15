@@ -64,10 +64,8 @@ def list_certificates(session, user_id: int, page: int = 1, per_page: int = 10, 
     """본인 신청에 속한 검증서만(include_all 이면 전체). issued_at 내림차순. 형식은 cavp 목록과 동일."""
     _int_in_range(page, "page", 1, 1_000_000)
     _int_in_range(per_page, "per_page", 1, 50)
-    items = as_store(session).list_certificates(None if include_all else user_id)
-    items = sorted(items, key=lambda c: (c.issued_at, c.id), reverse=True)
-    start = (page - 1) * per_page
-    return {"items": items[start:start + per_page], "total": len(items), "page": page, "per_page": per_page}
+    items, total = as_store(session).list_certificates_page(None if include_all else user_id, page, per_page)
+    return {"items": items, "total": total, "page": page, "per_page": per_page}
 
 
 def get_certificate(session, user_id: int, certificate_id: int) -> Certificate:
