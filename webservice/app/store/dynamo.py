@@ -93,6 +93,7 @@ class DynamoStore(Store):
         self.table = table
         self.client = table.meta.client
         self.name = table.name
+        self._memo = {}  # 요청(=저장소 객체) 안에서만 쓰는 읽기 결과 보관. 쓰기가 있으면 비운다.
 
     # ---- 내부 도구 ----
     def _get(self, pk, sk="-"):
@@ -179,6 +180,7 @@ class DynamoStore(Store):
         return dict(base, pk=pk, sk=sk)
 
     def create_application(self, user_id, algorithm_type):
+        self._memo.clear()
         aid, now = self._next("app"), _now()
         list_sk = f"APP#{_ts(now)}#{aid:012d}"
         base = {"id": aid, "user_id": user_id, "algorithm_type": algorithm_type, "status": "submitted",
@@ -204,6 +206,7 @@ class DynamoStore(Store):
         return _app(it) if it else None
 
     def change_application_status(self, application_id, expected_status, new_status) -> bool:
+        self._memo.clear()
         for _ in range(_RETRIES):
             meta = self._get(f"APP#{application_id}", "META") if isinstance(application_id, int) else None
             if not meta or meta["status"] != expected_status:
@@ -249,10 +252,24 @@ class DynamoStore(Store):
         return [_app(i) for i in items[start:start + per_page]], len(items)
 
     def all_applications(self, user_id):
-        return [_app(i) for i in self._query_apps("ALL" if user_id is None else f"USER#{user_id}")]
+        pk = "ALL" if user_id is None else f"USER#{user_id}"
+        if ("apps", pk) not in self._memo:  # 한 요청에서 같은 목록을 여러 번 읽으면 읽기 용량이 그만큼 더 든다
+            self._memo[("apps", pk)] = [_app(i) for i in self._query_apps(pk)]
+        return list(self._memo[("apps", pk)])
+
+    def recent_applications(self, user_id, limit):
+        pk = "ALL" if user_id is None else f"USER#{user_id}"
+        if ("apps", pk) in self._memo:
+            return super().recent_applications(user_id, limit)
+        # sk 가 APP#<시각>#<번호> 라 역순 Query 의 앞쪽이 최신순이다. 필요한 만큼만 읽는다.
+        r = self.table.query(KeyConditionExpression="pk = :p AND begins_with(sk, :a)",
+                             ExpressionAttributeValues={":p": pk, ":a": "APP#"},
+                             ScanIndexForward=False, ConsistentRead=True, Limit=limit)
+        return [_app(i) for i in r["Items"]]
 
     # ---- 검증서 ----
     def create_certificate(self, application_id, cert_type, integrity_hash, content, storage_dir):
+        self._memo.clear()
         app = self.get_application(application_id)
         cid, now = self._next("cert"), _now()
         list_sk = f"CERT#{_ts(now)}#{cid:012d}"
@@ -289,6 +306,7 @@ class DynamoStore(Store):
         return bytes(getattr(value, "value", value))  # boto3 는 바이너리를 Binary 객체로 돌려준다
 
     def set_tamper_status(self, certificate_id, status):
+        self._memo.clear()
         for _ in range(_RETRIES):
             meta = self._get(f"CERT#{certificate_id}", "META") if isinstance(certificate_id, int) else None
             if not meta:
@@ -309,6 +327,12 @@ class DynamoStore(Store):
         return None
 
     def list_certificates(self, user_id):
+        pk = "ALL" if user_id is None else f"USER#{user_id}"
+        if ("certs", pk) not in self._memo:
+            self._memo[("certs", pk)] = self._query_certs(user_id)
+        return list(self._memo[("certs", pk)])
+
+    def _query_certs(self, user_id):
         kw = {"KeyConditionExpression": "pk = :p AND begins_with(sk, :c)",
               "ExpressionAttributeValues": {":p": "ALL" if user_id is None else f"USER#{user_id}", ":c": "CERT#"},
               "ScanIndexForward": False, "ConsistentRead": True}
