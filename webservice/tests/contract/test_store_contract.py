@@ -329,3 +329,74 @@ def test_취소와_심사_시작_동시_요청은_한_요청만_성공한다(new
     s1 = new_store()
     assert s1.get_application(a.id).status in ("cancelled", "reviewing")
     s1.close()
+
+
+# ---- 집계·쪽 나누기 (부하 대응: 전체 목록을 읽지 않고도 같은 답을 내야 한다) ----
+def _seed_load(store, tmp_path):
+    a1, a2 = _user(store, "u_one"), _user(store, "u_two")
+    apps = [store.create_application(a1.id, "AES"), store.create_application(a1.id, "RSA"),
+            store.create_application(a2.id, "AES"), store.create_application(a2.id, "SHA-2")]
+    store.change_application_status(apps[0].id, "submitted", "reviewing")
+    store.change_application_status(apps[1].id, "submitted", "reviewing")
+    store.change_application_status(apps[1].id, "reviewing", "approved")
+    store.change_application_status(apps[3].id, "submitted", "cancelled")
+    c = store.create_certificate(apps[1].id, "CAVP", "h" * 64, b"x", str(tmp_path))
+    store.create_certificate(apps[0].id, "CAVP", "g" * 64, b"y", str(tmp_path))
+    store.set_tamper_status(c.id, "suspected")
+    return a1, a2, apps, c
+
+
+def test_신청_집계는_전체_목록과_같다(store, tmp_path):
+    a1, a2, apps, c = _seed_load(store, tmp_path)
+    from datetime import timedelta
+    far_past = datetime(2000, 1, 1)
+    st = store.application_stats(None, far_past)
+    assert st["total"] == 4 and st["new_since"] == 4
+    assert st["by_status"] == {"reviewing": 1, "approved": 1, "submitted": 1, "cancelled": 1} or \
+        {k: v for k, v in st["by_status"].items() if v} == {"reviewing": 1, "approved": 1, "submitted": 1, "cancelled": 1}
+    assert {k: v for k, v in st["by_algorithm"].items() if v} == {"AES": 2, "RSA": 1, "SHA-2": 1}
+    own = store.application_stats(a1.id, far_past)
+    assert own["total"] == 2
+    assert store.application_stats(a1.id, datetime(2999, 1, 1))["new_since"] == 0
+
+
+def test_최근_신청_상위_N건(store, tmp_path):
+    a1, a2, apps, c = _seed_load(store, tmp_path)
+    got = store.recent_applications(None, 3)
+    assert [a.id for a in got] == sorted((a.id for a in apps), reverse=True)[:3]
+    assert [a.id for a in store.recent_applications(a1.id, 5)] == sorted((apps[0].id, apps[1].id), reverse=True)
+
+
+def test_갱신순_신청_상태_필터와_개수_제한(store, tmp_path):
+    a1, a2, apps, c = _seed_load(store, tmp_path)
+    got = store.recent_updated_applications(None, ("reviewing", "approved", "rejected"), 5)
+    assert {a.id for a in got} == {apps[0].id, apps[1].id}
+    assert all(got[i].updated_at >= got[i + 1].updated_at for i in range(len(got) - 1))
+    assert len(store.recent_updated_applications(None, ("reviewing", "approved"), 1)) == 1
+
+
+def test_검증서_집계(store, tmp_path):
+    a1, a2, apps, c = _seed_load(store, tmp_path)
+    assert store.certificate_stats(None) == {"total": 2, "suspected_ids": [c.id]}
+    assert store.certificate_stats(a1.id)["total"] == 2
+    assert store.certificate_stats(a2.id) == {"total": 0, "suspected_ids": []}
+
+
+def test_검증서_쪽_나누기는_발급일_내림차순(store, tmp_path):
+    a1, a2, apps, c = _seed_load(store, tmp_path)
+    items, total = store.list_certificates_page(None, 1, 1)
+    assert total == 2 and len(items) == 1
+    all_items = store.list_certificates(None)
+    expect = sorted(all_items, key=lambda x: (x.issued_at, x.id), reverse=True)
+    assert items[0].id == expect[0].id
+    items2, _ = store.list_certificates_page(None, 2, 1)
+    assert items2[0].id == expect[1].id
+    assert store.list_certificates_page(None, 3, 1)[0] == []
+
+
+def test_여러_신청을_한_번에_조회(store, tmp_path):
+    a1, a2, apps, c = _seed_load(store, tmp_path)
+    got = store.get_applications_by_ids({apps[0].id, apps[2].id, 9999})
+    assert set(got) == {apps[0].id, apps[2].id}
+    assert got[apps[0].id].algorithm_type == "AES"
+    assert store.get_applications_by_ids(set()) == {}

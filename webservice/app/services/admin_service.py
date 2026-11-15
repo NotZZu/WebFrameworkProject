@@ -32,32 +32,31 @@ def get_summary(session, user_id: int, now: datetime | None = None) -> dict:
     if user.user_type != "institution":
         raise PermissionDeniedError("관리자 대시보드는 기관 사용자만 볼 수 있습니다.")
 
-    apps = store.all_applications(None)
-    certs = store.list_certificates(None)
-    by_status = {k: 0 for k in STATUS_LABELS}
-    by_algorithm = {k: 0 for k in ALGORITHMS}
-    for a in apps:
-        by_status[a.status] = by_status.get(a.status, 0) + 1
-        by_algorithm[a.algorithm_type] = by_algorithm.get(a.algorithm_type, 0) + 1
     since = now - timedelta(days=7)
+    st = store.application_stats(None, since)
+    cst = store.certificate_stats(None)
+    by_status = {k: 0 for k in STATUS_LABELS}
+    by_status.update(st["by_status"])
+    by_algorithm = {k: 0 for k in ALGORITHMS}
+    by_algorithm.update(st["by_algorithm"])
 
-    recent = sorted(apps, key=lambda a: (a.submitted_at, a.id), reverse=True)[:5]
+    recent = store.recent_applications(None, 5)
     owners = store.get_users_by_ids({a.user_id for a in recent})
-    suspected = sorted((c for c in certs if c.tamper_status == "suspected"), key=lambda c: c.id)
-    attention = [{"type": "warning", "message": f"검증서(CV-{c.id:04d}) 위변조 의심 항목이 있습니다."} for c in suspected]
+    attention = [{"type": "warning", "message": f"검증서(CV-{cid:04d}) 위변조 의심 항목이 있습니다."}
+                 for cid in cst["suspected_ids"][:5]]
     if by_status["submitted"]:
         attention.append({"type": "info", "message": f"심사를 기다리는 신청이 {by_status['submitted']}건 있습니다."})
 
     return {
         "applications": {
-            "total": len(apps),
+            "total": st["total"],
             "in_progress": by_status["submitted"] + by_status["reviewing"],
             "pending_review": by_status["submitted"],
-            "new_last_7d": sum(1 for a in apps if a.submitted_at >= since),
+            "new_last_7d": st["new_since"],
             "by_status": by_status,
             "by_algorithm": by_algorithm,
         },
-        "certificates": {"total": len(certs), "suspected": len(suspected)},
+        "certificates": {"total": cst["total"], "suspected": len(cst["suspected_ids"])},
         "recent_applications": [
             {"id": a.id, "algorithm_type": a.algorithm_type,
              "owner": owners[a.user_id].username if a.user_id in owners else None,

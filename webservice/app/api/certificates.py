@@ -28,7 +28,7 @@ def _int_param(name, default):
 
 def _decorate(certs, with_owner):
     store = db()
-    apps = {c.application_id: store.get_application(c.application_id) for c in certs}
+    apps = store.get_applications_by_ids({c.application_id for c in certs})
     users = store.get_users_by_ids({a.user_id for a in apps.values() if a}) if with_owner else {}
     return [certificate_json(c, apps.get(c.application_id),
                              users[apps[c.application_id].user_id].username if with_owner and apps.get(c.application_id)

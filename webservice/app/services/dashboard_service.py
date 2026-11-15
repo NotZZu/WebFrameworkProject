@@ -41,21 +41,34 @@ def get_summary(session, user_id: int, now: datetime | None = None) -> dict:
 
     scope = "all" if user.user_type == "institution" else "own"
     owner = user.id if scope == "own" else None
-    apps = store.all_applications(owner)
-    certs = store.list_certificates(owner)
-
-    by_status = {k: 0 for k in STATUS_LABELS}
-    for a in apps:
-        by_status[a.status] = by_status.get(a.status, 0) + 1
     since = now - timedelta(days=7)
-
-    recent = sorted(apps, key=lambda a: (a.submitted_at, a.id), reverse=True)[:3]
-    suspected = sorted((c for c in certs if c.tamper_status == "suspected"), key=lambda c: c.id)
+    if scope == "own":
+        # 본인 범위는 데이터가 적어 한 번에 읽어 계산하는 쪽이 질의를 여러 번 보내는 것보다 싸다
+        apps = store.all_applications(owner)
+        certs = store.list_certificates(owner)
+        st = {"total": len(apps), "new_since": sum(1 for a in apps if a.submitted_at >= since), "by_status": {}}
+        for a in apps:
+            st["by_status"][a.status] = st["by_status"].get(a.status, 0) + 1
+        cst = {"total": len(certs), "suspected_ids": sorted(c.id for c in certs if c.tamper_status == "suspected")}
+        recent = sorted(apps, key=lambda a: (a.submitted_at, a.id), reverse=True)[:3]
+        updated = sorted((a for a in apps if a.status in _INFO_MESSAGES), key=lambda a: (a.updated_at, a.id), reverse=True)
+    else:
+        # 기관 전체 범위는 전체 행을 읽지 않고 DB 집계·상위 N건 조회로 구한다
+        st = store.application_stats(owner, since)
+        cst = store.certificate_stats(owner)
+        recent = store.recent_applications(owner, 3)
+        updated = None
+    by_status = {k: 0 for k in STATUS_LABELS}
+    by_status.update(st["by_status"])
     notifications = [
-        {"type": "warning", "message": f"검증서(CV-{c.id:04d}) 위변조 의심 항목이 있습니다."} for c in suspected
+        {"type": "warning", "message": f"검증서(CV-{cid:04d}) 위변조 의심 항목이 있습니다."}
+        for cid in cst["suspected_ids"][:5]
     ]
-    for a in sorted(apps, key=lambda a: (a.updated_at, a.id), reverse=True):
-        if a.status in _INFO_MESSAGES:
+    room = 5 - len(notifications)
+    if room > 0:
+        if updated is None:
+            updated = store.recent_updated_applications(owner, tuple(_INFO_MESSAGES), room)
+        for a in updated[:room]:
             notifications.append({"type": "info", "message": _INFO_MESSAGES[a.status].format(algo=a.algorithm_type)})
 
     info = store.get_personal_info(user.id)
@@ -63,12 +76,12 @@ def get_summary(session, user_id: int, now: datetime | None = None) -> dict:
         "scope": scope,
         "user": {"username": user.username, "user_type": user.user_type},
         "applications": {
-            "total": len(apps),
+            "total": st["total"],
             "in_progress": by_status["submitted"] + by_status["reviewing"],
             "by_status": by_status,
-            "new_last_7d": sum(1 for a in apps if a.submitted_at >= since),
+            "new_last_7d": st["new_since"],
         },
-        "certificates": {"total": len(certs), "suspected": len(suspected)},
+        "certificates": {"total": cst["total"], "suspected": len(cst["suspected_ids"])},
         "privacy": {"processed": info is not None, "level": info.anonymization_level if info else None},
         "recent_applications": [
             {"id": a.id, "algorithm_type": a.algorithm_type, "status": a.status,

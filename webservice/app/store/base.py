@@ -85,6 +85,55 @@ class Store:
         없을 때만 new_pseudonym_id 를 쓴다(동시에 여러 번 불러도 ID 하나). 'anonymous' 이면 가명 ID 를 지운다."""
         raise NotImplementedError
 
+    # ---- 집계·쪽 나누기 (부하 대응) ----
+    def _agg_apps(self, user_id):
+        """집계용 신청 목록. 저장소가 집계에는 더 싼 읽기(최종 일관성)를 쓸 수 있으면 덮어쓴다."""
+        return self.all_applications(user_id)
+
+    def _agg_certs(self, user_id):
+        return self.list_certificates(user_id)
+
+    # 아래 메서드는 전체 목록을 읽어 계산하는 기본 구현을 둔다. 저장소가 더 싸게 답할 수 있으면(SQL) 덮어쓴다.
+    def application_stats(self, user_id, since):
+        """{"total", "by_status": {상태: 건수}, "by_algorithm": {알고리즘: 건수}, "new_since": submitted_at >= since 건수}.
+        0건인 키는 없어도 된다(서비스가 채운다). user_id 가 None 이면 전체."""
+        apps = self._agg_apps(user_id)
+        by_status, by_algo = {}, {}
+        for a in apps:
+            by_status[a.status] = by_status.get(a.status, 0) + 1
+            by_algo[a.algorithm_type] = by_algo.get(a.algorithm_type, 0) + 1
+        return {"total": len(apps), "by_status": by_status, "by_algorithm": by_algo,
+                "new_since": sum(1 for a in apps if a.submitted_at >= since)}
+
+    def recent_applications(self, user_id, limit):
+        """submitted_at 내림차순, id 내림차순 상위 limit 건."""
+        apps = self._agg_apps(user_id)
+        return sorted(apps, key=lambda a: (a.submitted_at, a.id), reverse=True)[:limit]
+
+    def recent_updated_applications(self, user_id, statuses, limit):
+        """상태가 statuses 에 속한 신청을 updated_at 내림차순, id 내림차순으로 상위 limit 건."""
+        apps = [a for a in self._agg_apps(user_id) if a.status in statuses]
+        return sorted(apps, key=lambda a: (a.updated_at, a.id), reverse=True)[:limit]
+
+    def get_applications_by_ids(self, ids) -> dict:
+        """{id: 신청}. 없는 id 는 빠진다."""
+        out = {}
+        for i in set(ids):
+            a = self.get_application(i)
+            if a is not None:
+                out[i] = a
+        return out
+
+    def certificate_stats(self, user_id):
+        """{"total", "suspected_ids": 위변조 의심 검증서 id 오름차순}."""
+        certs = self._agg_certs(user_id)
+        return {"total": len(certs), "suspected_ids": sorted(c.id for c in certs if c.tamper_status == "suspected")}
+
+    def list_certificates_page(self, user_id, page, per_page):
+        """(items, total). issued_at 내림차순, id 내림차순."""
+        certs = sorted(self.list_certificates(user_id), key=lambda c: (c.issued_at, c.id), reverse=True)
+        return certs[(page - 1) * per_page:page * per_page], len(certs)
+
     def close(self):
         pass
 
